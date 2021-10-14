@@ -1,35 +1,42 @@
-from matplotlib.pyplot import cohere
-import torch
 import numpy as np
+import torch
 
 PI = float(np.pi)
 
 
-def fseries(a, b, n, bias, t, period):
-    # coeffs (B,N,3) (a,b,n) terms
-    # n     (B,N)
-    # bias   (B,)
-    # t      (B,T)
-    # period (B,)
-    # ->     (B,T)
-    assert a.dim() == b.dim() == n.dim() == 2
-    assert bias.dim() == 1
-    assert t.dim() == 2
-    assert period.dim() == 1
+def fseries_amp_phase(
+    bias: torch.FloatTensor,
+    n: torch.IntTensor,
+    a: torch.FloatTensor,
+    phase: torch.FloatTensor,
+    period: torch.FloatTensor,
+    t: torch.FloatTensor,
+):
+    """Computes the Fourier series from amplitude-phase parametrization.
 
-    a = a.unsqueeze(1)  # (B,1,N)
-    b = b.unsqueeze(1)  # (B,1,N)
-    n = n.unsqueeze(-1)  # (B,N,1)
-    t = t.unsqueeze(1)  # (B,1,T)
-    arg = 2 * PI * n * t / period  # (BxNxT)
-    return (
-        bias.view(-1, 1) * 0.5
-        + (a @ torch.cos(arg)).squeeze(1)
-        + (b @ torch.sin(arg)).squeeze(1)
-    )
+    This function supports batching, so that multiple series can
+    be evaluated in parallel.
 
+    Params
+    ------
+    bias: (B,) or (1) tensor
+        Bias term(s) aka DC values
+    n: (B,N) or (N,) or tensor
+        component values of the series
+    a: (B,N) or (N,) tensor
+        coefficient of components
+    phase: (B,N) or (B,) or (1) tensor
+        phase for component term
+    period: (B,) or (1) tensor
+        period for each of the curves, such that f(t) == f(t+T)
+    t: (B,T) or (T,) tensor
+        sample times for each of the curves
 
-def fseries_amp_phase(bias, n, a, phase, period, t):
+    Returns
+    -------
+    y: (B,T) tensor or (1,T)
+        function values for each of the fourier series results
+    """
     # https://www.seas.upenn.edu/~kassam/tcom370/n99_2B.pdf
     t = torch.atleast_2d(t).unsqueeze(1)  # (B,1,T)
     period = torch.atleast_1d(period).view(-1, 1, 1)  # (B,1,1)
@@ -79,6 +86,7 @@ def square_wave():
     yhat[0] = 0.0
     yhat[-1] = 0.0
 
+    plt.title("Approximations of a step function")
     plt.plot(t, yhat, c="k")
     plt.plot(t, y[0], label="5 terms")
     plt.plot(t, y[1], label="10 terms")
@@ -114,6 +122,7 @@ def random_waves():
         period=period,
         t=t,
     )
+    plt.title("Random waves sampled at random times")
     plt.plot(t[0], y[0])
     plt.plot(t[1], y[1])
     plt.plot(t[2], y[2])
@@ -122,37 +131,8 @@ def random_waves():
 
 
 def main():
-    # square_wave()
+    square_wave()
     random_waves()
-    import matplotlib.pyplot as plt
-
-    T = 10.0
-
-    # coeffs = torch.rand(2, 5, 2)
-    # ns = torch.arange(5) + 1
-    # bias = torch.rand(2)
-    t = torch.linspace(0, T, 1000).unsqueeze(0)
-
-    # y = fseries_amp_phase(
-    #     bias=torch.rand(2),
-    #     n=torch.arange(2) + 1,
-    #     a=torch.rand(2, 2),
-    #     phase=torch.tensor([0.0, 0.5]),
-    #     period=torch.tensor(T),
-    #     t=t,
-    # )
-
-    # y = fseries(
-    #     coeffs[..., 0],
-    #     coeffs[..., 1],
-    #     ns.unsqueeze(0),
-    #     bias,
-    #     t,
-    #     torch.tensor(T).view(-1),
-    # )
-    plt.plot(t[0], y[0])
-    # plt.plot(t[0], y[1])
-    plt.show()
 
 
 if __name__ == "__main__":

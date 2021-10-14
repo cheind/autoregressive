@@ -44,10 +44,15 @@ def basic_block(
 ) -> torch.nn.Sequential:
     return torch.nn.Sequential(
         CausalConv1d(
-            in_channels, out_channels, kernel_size, stride=1, dilation=dilation
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=1,
+            dilation=dilation,
+            bias=False,
         ),
-        torch.nn.LeakyReLU(),
         torch.nn.BatchNorm1d(out_channels),
+        torch.nn.LeakyReLU(),
     )
 
 
@@ -76,6 +81,7 @@ class AutoRegressor(pl.LightningModule):
                 dilation=dilation_depth[-1],
             )
         )
+        self.out_channels = out_channels  # interpret as forcast steps
         self.save_hyperparameters()
 
     def forward(self, x):
@@ -87,15 +93,19 @@ class AutoRegressor(pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         x, y = train_batch
-        y_hat = self.regress(x.unsqueeze(1)).squeeze(1)
-        loss = F.smooth_l1_loss(y_hat, y)
+        y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
+        n = y.shape[-1]
+        y_hat = self.regress(x.unsqueeze(1))  # .squeeze(1)
+        loss = F.smooth_l1_loss(y_hat[..., :n], y)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
         x, y = val_batch
-        y_hat = self.regress(x.unsqueeze(1)).squeeze(1)
-        loss = F.smooth_l1_loss(y_hat, y)
+        y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
+        n = y.shape[-1]
+        y_hat = self.regress(x.unsqueeze(1))
+        loss = F.smooth_l1_loss(y_hat[..., :n], y)
         self.log("val_loss", loss)
         return loss
 
@@ -108,13 +118,16 @@ def train():
     batch_size = 16
     blocks = 5
     hdims = 128
+    forecasts = 128
 
     dataset_train = FSeriesDataset(num_curves=4096, num_terms=3, noise=0.0)
     dataset_val = FSeriesDataset(num_curves=4096, num_terms=3, noise=0)
     train_loader = data.DataLoader(dataset_train, batch_size, num_workers=0)
     val_loader = data.DataLoader(dataset_val, batch_size, num_workers=0)
 
-    net = AutoRegressor(num_blocks=blocks, hidden_channels=hdims)
+    net = AutoRegressor(
+        num_blocks=blocks, hidden_channels=hdims, out_channels=forecasts
+    )
     ckpt = ModelCheckpoint(
         monitor="val_loss",
         filename="autoreg-{epoch:02d}-{val_loss:.4f}",
@@ -129,7 +142,7 @@ def eval():
 
     # torch.random.manual_seed(123)
     net = AutoRegressor.load_from_checkpoint(
-        r"C:\dev\autoregressive-damp\lightning_logs\version_15\checkpoints\autoreg-epoch=02-val_loss=0.0007.ckpt"
+        r"C:\dev\autoregressive-damp\lightning_logs\version_24\checkpoints\autoreg-epoch=33-val_loss=0.0159.ckpt"
     )
     net.eval()
     data = FSeriesDataset(num_curves=4096, noise=0.0, num_terms=3)
@@ -143,22 +156,34 @@ def eval():
         # print(net(y.unsqueeze(0).unsqueeze(0))[0, 0, 200])
 
         see = 250
-        pred = 250
-        trials = 1
-        yhat = torch.empty((trials, y.shape[0]))
-        yhat[:, :see] = x[:see].unsqueeze(0)
-        # yhat[:, see - 1] += torch.randn(trials) * 1e-1
+        pred = net.out_channels
+        yhat = torch.empty(250 + pred)
+        yhat[:see] = x[:see]
         with torch.no_grad():
-            for i in range(see, see + pred):
-                # mu = net(yhat[:, :i].unsqueeze(1))[:, 0, -1]
-                mu = net(y[:i].unsqueeze(0).unsqueeze(0))[:, 0, -1]
-                # p = D.Normal(loc=mu, scale=torch.tensor([1e-2])).sample()
-                yhat[:, i] = mu
+            mu = net(yhat[:see].view(1, 1, -1))[0, :, -1]
+            yhat[see : see + pred] = mu
 
         plt.plot(t, y, c="k")
-        for tidx in range(trials):
-            plt.plot(t[see : see + pred], yhat[tidx, see : see + pred])
+        plt.plot(t[:see], yhat[:see])
+        plt.plot(t[see : see + pred], yhat[see : see + pred])
         plt.show()
+
+        # pred = 250
+        # trials = 1
+        # yhat = torch.empty((trials, y.shape[0]))
+        # yhat[:, :see] = x[:see].unsqueeze(0)
+        # # yhat[:, see - 1] += torch.randn(trials) * 1e-1
+        # with torch.no_grad():
+        #     for i in range(see, see + pred):
+        #         # mu = net(yhat[:, :i].unsqueeze(1))[:, 0, -1]
+        #         mu = net(y[:i].unsqueeze(0).unsqueeze(0))[:, 0, -1]
+        #         # p = D.Normal(loc=mu, scale=torch.tensor([1e-2])).sample()
+        #         yhat[:, i] = mu
+
+        # plt.plot(t, y, c="k")
+        # for tidx in range(trials):
+        #     plt.plot(t[see : see + pred], yhat[tidx, see : see + pred])
+        # plt.show()
 
 
 #  To increase reception field exponentially with linearly increasing number of parameters

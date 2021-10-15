@@ -91,15 +91,15 @@ def train(args):
     logging.basicConfig(level=logging.INFO)
 
     batch_size = 16
-    dataset_train = FSeriesDataset(num_curves=4096, num_terms=5, noise=0.0)
+    dataset_train = FSeriesDataset(num_curves=4096, num_terms=5, noise=1e-2)
     dataset_val = FSeriesDataset(num_curves=4096, num_terms=5, noise=0)
     train_loader = data.DataLoader(dataset_train, batch_size, num_workers=0)
     val_loader = data.DataLoader(dataset_val, batch_size, num_workers=0)
 
     net = AutoregressiveModel(
         in_channels=1,
-        hidden_channels=32,
-        forecast_steps=128,
+        hidden_channels=64,
+        forecast_steps=64,
         kernel_size=2,
         num_layers=7,
     )
@@ -129,7 +129,8 @@ def eval(args):
         # print(net(y[:201].unsqueeze(0).unsqueeze(0))[0, 0, 200])
         # print(net(y.unsqueeze(0).unsqueeze(0))[0, 0, 200])
 
-        see = np.random.randint(0, 300)
+        # see = np.random.randint(0, 300)
+        see = 128
         pred = net.forecast_steps
         yhat = torch.empty(see + pred)
         yhat[:see] = x[:see]
@@ -142,22 +143,23 @@ def eval(args):
         plt.plot(t[see : see + pred], yhat[see : see + pred])
         plt.show()
 
-        # pred = 250
-        # trials = 1
-        # yhat = torch.empty((trials, y.shape[0]))
-        # yhat[:, :see] = x[:see].unsqueeze(0)
-        # # yhat[:, see - 1] += torch.randn(trials) * 1e-1
-        # with torch.no_grad():
-        #     for i in range(see, see + pred):
-        #         # mu = net(yhat[:, :i].unsqueeze(1))[:, 0, -1]
-        #         mu = net(y[:i].unsqueeze(0).unsqueeze(0))[:, 0, -1]
-        #         # p = D.Normal(loc=mu, scale=torch.tensor([1e-2])).sample()
-        #         yhat[:, i] = mu
 
-        # plt.plot(t, y, c="k")
-        # for tidx in range(trials):
-        #     plt.plot(t[see : see + pred], yhat[tidx, see : see + pred])
-        # plt.show()
+# pred = 250
+# trials = 1
+# yhat = torch.empty((trials, y.shape[0]))
+# yhat[:, :see] = x[:see].unsqueeze(0)
+# # yhat[:, see - 1] += torch.randn(trials) * 1e-1
+# with torch.no_grad():
+#     for i in range(see, see + pred):
+#         # mu = net(yhat[:, :i].unsqueeze(1))[:, 0, -1]
+#         mu = net(y[:i].unsqueeze(0).unsqueeze(0))[:, 0, -1]
+#         # p = D.Normal(loc=mu, scale=torch.tensor([1e-2])).sample()
+#         yhat[:, i] = mu
+
+# plt.plot(t, y, c="k")
+# for tidx in range(trials):
+#     plt.plot(t[see : see + pred], yhat[tidx, see : see + pred])
+# plt.show()
 
 
 #  To increase reception field exponentially with linearly increasing number of parameters

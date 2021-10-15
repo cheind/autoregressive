@@ -13,12 +13,15 @@ class FSeriesDataset(torch.utils.data.Dataset):
         num_terms: int = 3,
         num_samples: int = 500,
         noise: float = 5e-2,
+        seed: int = None,
     ) -> None:
         super().__init__()
         self.num_terms = num_terms
         self.num_samples = num_samples
         self.num_curves = num_curves
         self.noise = noise
+        if seed:
+            torch.random.manual_seed(seed)
 
     def __len__(self):
         return self.num_curves

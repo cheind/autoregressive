@@ -1,91 +1,64 @@
 import torch
 import torch.nn
+from torch.nn.modules import module
 import torch.optim
 import torch.nn.functional as F
 import pytorch_lightning as pl
-import torch.distributions as D
+import numpy as np
+import logging
+
+
+_logger = logging.getLogger("pytorch_lightning")
+_logger.setLevel(logging.INFO)
 
 # https://github.com/pytorch/pytorch/issues/1333
 # https://theblog.github.io/post/convolution-in-autoregressive-neural-networks/
 # http://infosci.cornell.edu/~koenecke/files/Deep_Learning_for_Time_Series_Tutorial.pdf
+# https://arxiv.org/pdf/1609.03499v2.pdf
+# https://github.com/ButterscotchVanilla/Wavenet-PyTorch/blob/master/wavenet/models.py
+# https://github.com/tomlepaine/fast-wavenet
+# https://github.com/ibab/tensorflow-wavenet/blob/master/wavenet/model.py#L118
+
+from . import layers
 
 
-class CausalConv1d(torch.nn.Conv1d):
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride=1,
-        dilation=1,
-        groups=1,
-        bias=True,
-    ):
-
-        super().__init__(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=0,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
-        )
-
-        self.left_pad = (kernel_size - 1) * dilation
-
-    def forward(self, input):
-        return super().forward(F.pad(input, (self.left_pad, 0)))
-
-
-def basic_block(
-    in_channels: int, out_channels: int, kernel_size: int, dilation: int
-) -> torch.nn.Sequential:
-    return torch.nn.Sequential(
-        CausalConv1d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=1,
-            dilation=dilation,
-            bias=False,
-        ),
-        torch.nn.BatchNorm1d(out_channels),
-        torch.nn.LeakyReLU(),
-    )
-
-
-class AutoRegressor(pl.LightningModule):
+class AutoregressiveModel(pl.LightningModule):
     def __init__(
         self,
         in_channels: int = 1,
-        out_channels: int = 1,
-        hidden_channels: int = 64,
+        hidden_channels: int = 32,
+        forecast_steps: int = 1,
         kernel_size: int = 2,
-        num_blocks: int = 4,
+        num_layers: int = 10,
     ) -> None:
         super().__init__()
-        channels = [in_channels] + [hidden_channels] * num_blocks
-        dilation_depth = [2 ** (i + 1) for i in range(num_blocks + 1)]
-        blocks = []
-        for cin, cout, d in zip(channels[:-1], channels[1:], dilation_depth):
-            blocks.append(basic_block(cin, cout, kernel_size, d))
-        self.regress = torch.nn.Sequential(
-            *blocks,
-            CausalConv1d(
-                channels[-1],
-                out_channels,
-                kernel_size,
-                stride=1,
-                dilation=dilation_depth[-1],
+
+        modules = [
+            layers.BasicBlock(in_channels, hidden_channels, kernel_size, dilation=1)
+        ]
+        for i in range(1, num_layers):
+            drate = 2 ** i
+            b = layers.BasicBlock(
+                hidden_channels, hidden_channels, kernel_size, dilation=drate
             )
+            modules.append(b)
+        self.features = torch.nn.Sequential(*modules)
+        self.head = torch.nn.Conv1d(
+            hidden_channels, forecast_steps, 1, stride=1, padding=0
         )
-        self.out_channels = out_channels  # interpret as forcast steps
+
+        # Compute the lag (receptive field of this model). Currently
+        # the equation below equals 2**n_layers (k=2), but is more generic
+        # when we introduce repititions, i.e dilations [1,2,4,8,1,2,4,8]
+        self.receptive_field = (kernel_size - 1) * sum(
+            [2 ** i for i in range(num_layers)]
+        ) + 1
+        _logger.info(f"Receptive field of model {self.receptive_field}")
+        self.forecast_steps = forecast_steps
         self.save_hyperparameters()
 
     def forward(self, x):
-        return self.regress(x)
+        return self.head(self.features(x))
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -93,18 +66,18 @@ class AutoRegressor(pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         x, y = train_batch
-        y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
+        y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
         n = y.shape[-1]
-        y_hat = self.regress(x.unsqueeze(1))  # .squeeze(1)
+        y_hat = self(x.unsqueeze(1))  # .squeeze(1)
         loss = F.smooth_l1_loss(y_hat[..., :n], y)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
         x, y = val_batch
-        y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
+        y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
         n = y.shape[-1]
-        y_hat = self.regress(x.unsqueeze(1))
+        y_hat = self(x.unsqueeze(1))
         loss = F.smooth_l1_loss(y_hat[..., :n], y)
         self.log("val_loss", loss, prog_bar=True)
         return loss
@@ -115,18 +88,20 @@ def train(args):
     from .dataset import FSeriesDataset
     from pytorch_lightning.callbacks import ModelCheckpoint
 
-    batch_size = 16
-    blocks = 5
-    hdims = 128
-    forecasts = 128
+    logging.basicConfig(level=logging.INFO)
 
+    batch_size = 16
     dataset_train = FSeriesDataset(num_curves=4096, num_terms=5, noise=0.0)
     dataset_val = FSeriesDataset(num_curves=4096, num_terms=5, noise=0)
     train_loader = data.DataLoader(dataset_train, batch_size, num_workers=0)
     val_loader = data.DataLoader(dataset_val, batch_size, num_workers=0)
 
-    net = AutoRegressor(
-        num_blocks=blocks, hidden_channels=hdims, out_channels=forecasts
+    net = AutoregressiveModel(
+        in_channels=1,
+        hidden_channels=32,
+        forecast_steps=128,
+        kernel_size=2,
+        num_layers=7,
     )
     ckpt = ModelCheckpoint(
         monitor="val_loss",
@@ -142,7 +117,7 @@ def eval(args):
     from .dataset import FSeriesDataset
 
     # torch.random.manual_seed(123)
-    net = AutoRegressor.load_from_checkpoint(args.ckpt)
+    net = AutoregressiveModel.load_from_checkpoint(args.ckpt)
     net.eval()
     data = FSeriesDataset(num_curves=4096, noise=0.0, num_terms=5)
 
@@ -154,9 +129,9 @@ def eval(args):
         # print(net(y[:201].unsqueeze(0).unsqueeze(0))[0, 0, 200])
         # print(net(y.unsqueeze(0).unsqueeze(0))[0, 0, 200])
 
-        see = 250
-        pred = net.out_channels
-        yhat = torch.empty(250 + pred)
+        see = np.random.randint(0, 300)
+        pred = net.forecast_steps
+        yhat = torch.empty(see + pred)
         yhat[:see] = x[:see]
         with torch.no_grad():
             mu = net(yhat[:see].view(1, 1, -1))[0, :, -1]

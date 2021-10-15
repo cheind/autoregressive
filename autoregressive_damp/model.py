@@ -106,11 +106,11 @@ class AutoRegressor(pl.LightningModule):
         n = y.shape[-1]
         y_hat = self.regress(x.unsqueeze(1))
         loss = F.smooth_l1_loss(y_hat[..., :n], y)
-        self.log("val_loss", loss)
+        self.log("val_loss", loss, prog_bar=True)
         return loss
 
 
-def train():
+def train(args):
     import torch.utils.data as data
     from .dataset import FSeriesDataset
     from pytorch_lightning.callbacks import ModelCheckpoint
@@ -120,8 +120,8 @@ def train():
     hdims = 128
     forecasts = 128
 
-    dataset_train = FSeriesDataset(num_curves=4096, num_terms=3, noise=0.0)
-    dataset_val = FSeriesDataset(num_curves=4096, num_terms=3, noise=0)
+    dataset_train = FSeriesDataset(num_curves=4096, num_terms=5, noise=0.0)
+    dataset_val = FSeriesDataset(num_curves=4096, num_terms=5, noise=0)
     train_loader = data.DataLoader(dataset_train, batch_size, num_workers=0)
     val_loader = data.DataLoader(dataset_val, batch_size, num_workers=0)
 
@@ -132,20 +132,19 @@ def train():
         monitor="val_loss",
         filename="autoreg-{epoch:02d}-{val_loss:.4f}",
     )
-    trainer = pl.Trainer(gpus=1, callbacks=[ckpt])
+    trainer = pl.Trainer(gpus=1, callbacks=[ckpt], max_epochs=10)
     trainer.fit(net, train_dataloader=train_loader, val_dataloaders=val_loader)
+    print(ckpt.best_model_path)
 
 
-def eval():
+def eval(args):
     import matplotlib.pyplot as plt
     from .dataset import FSeriesDataset
 
     # torch.random.manual_seed(123)
-    net = AutoRegressor.load_from_checkpoint(
-        r"C:\dev\autoregressive-damp\lightning_logs\version_24\checkpoints\autoreg-epoch=33-val_loss=0.0159.ckpt"
-    )
+    net = AutoRegressor.load_from_checkpoint(args.ckpt)
     net.eval()
-    data = FSeriesDataset(num_curves=4096, noise=0.0, num_terms=3)
+    data = FSeriesDataset(num_curves=4096, noise=0.0, num_terms=5)
 
     for i in range(10):
         x, y = data[i]
@@ -189,14 +188,21 @@ def eval():
 #  To increase reception field exponentially with linearly increasing number of parameters
 
 
-if __name__ == "__main__":
-    # train()
-    eval()
-    # x = torch.arange(1, 10).float()
-    # n = CausalConv1d(1, 1, 2, dilation=2)
-    # n.weight.data.fill_(1.0)
-    # n.bias.data.fill_(0.0)
-    # print(n(x.view(1, 1, -1)))
+def main():
+    import argparse
+    from pathlib import Path
 
-    # net = AutoRegressor(1, 1, num_blocks=4)
-    # print(net)
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser_train = subparsers.add_parser("train", help="train")
+    parser_eval = subparsers.add_parser("eval", help="eval cartpole agent")
+    parser_eval.add_argument("ckpt", type=Path, help="model checkpoint file")
+    args = parser.parse_args()
+    if args.command == "train":
+        train(args)
+    elif args.command == "eval":
+        eval(args)
+
+
+if __name__ == "__main__":
+    main()

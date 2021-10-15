@@ -113,7 +113,7 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         ) + self.coeff_range[0]
         coeffs = coeffs * torch.logspace(
             0, -self.smoothness, terms
-        )  # decay coefficients for higher order terms. A value of two will decay the last term by a factor of 0.01
+        )  # decay coefficients for higher order terms. A value of 2 will decay the last term by a factor of 0.01
         phase = (self.phase_range[1] - self.phase_range[0]) * torch.rand(
             terms, generator=g
         ) + self.phase_range[0]

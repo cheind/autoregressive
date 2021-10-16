@@ -61,7 +61,7 @@ class AutoregressiveModel(pl.LightningModule):
         return self.head(self.features(x))
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=1e-4)
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
@@ -90,23 +90,27 @@ def train(args):
 
     logging.basicConfig(level=logging.INFO)
 
-    batch_size = 16
+    batch_size = 64
     dataset_train = FSeriesIterableDataset(
-        num_terms=(3, 8),
+        num_terms=(3, 5),
         num_samples=500,
         period_range=(10.0, 12.0),
-        bias_range=(-1.0, 1.0),
+        bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
-        transform=Noise(1e-3),
+        transform=Noise(scale=1e-3, p=0.25),
     )
+    # Note, using fixed noise with probability 1, will teach the model
+    # to always account for that noise level. When you then turn off the
+    # noise in evaluation, the models predictions will be significantly
+    # more noisy. Hence, we add noise only once in a while.
 
     dataset_val = FSeriesIterableDataset(
-        num_terms=(3, 8),
+        num_terms=(3, 5),
         num_samples=500,
         period_range=(10.0, 12.0),
-        bias_range=(-1.0, 1.0),
+        bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
@@ -117,7 +121,7 @@ def train(args):
     net = AutoregressiveModel(
         in_channels=1,
         hidden_channels=128,
-        forecast_steps=64,
+        forecast_steps=128,
         kernel_size=2,
         num_layers=7,
     )
@@ -128,8 +132,8 @@ def train(args):
     trainer = pl.Trainer(
         gpus=1,
         callbacks=[ckpt],
-        val_check_interval=1024,
-        limit_val_batches=256,
+        val_check_interval=4096 / batch_size,
+        limit_val_batches=1024 / batch_size,
     )
     trainer.fit(net, train_dataloader=train_loader, val_dataloaders=val_loader)
     print(ckpt.best_model_path)
@@ -137,17 +141,17 @@ def train(args):
 
 def eval(args):
     import matplotlib.pyplot as plt
-    from .dataset import FSeriesIterableDataset, PI
+    from .dataset import FSeriesIterableDataset, PI, Noise
 
     # torch.random.manual_seed(123)
     net = AutoregressiveModel.load_from_checkpoint(args.ckpt)
     net.eval()
 
     dataset_val = FSeriesIterableDataset(
-        num_terms=(3, 8),
+        num_terms=(3, 5),
         num_samples=500,
         period_range=(10.0, 12.0),
-        bias_range=(-1.0, 1.0),
+        bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
@@ -161,7 +165,7 @@ def eval(args):
         # print(net(y.unsqueeze(0).unsqueeze(0))[0, 0, 200])
 
         # see = np.random.randint(0, 300)
-        see = 128
+        see = 250  # net.receptive_field
         pred = net.forecast_steps
         yhat = torch.empty(see + pred)
         yhat[:see] = x[:see]
@@ -170,7 +174,7 @@ def eval(args):
             yhat[see : see + pred] = mu
 
         plt.plot(ty, y, c="k")
-        plt.plot(tx[:see], yhat[:see])
+        plt.plot(tx[:see], y[:see])
         plt.plot(tx[see : see + pred], yhat[see : see + pred])
         plt.ylim(-2, 2)
         plt.show()

@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Callable, Dict, Iterator, Tuple, Union
 
@@ -97,7 +98,7 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
             )[0]
             sample = {
                 "x": z[:-1],
-                "y": z[1:],
+                "y": z[1:].clone(),
                 "tx": t[:-1],
                 "ty": t[1:],
             }
@@ -137,24 +138,43 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         }
 
 
-class Noise:
-    """Adds iid Gaussian zero-mean noise to observations."""
+class ApplyWithProb(ABC):
+    """Base transformation applied with probability `p`."""
 
-    def __init__(self, scale: float = 0.05) -> None:
-        self.scale = scale
+    def __init__(self, p=1.0) -> None:
+        self.p = p
 
     def __call__(self, sample: Sample) -> Sample:
+        if torch.rand(1) < self.p:
+            return self._apply(sample)
+        else:
+            return sample
+
+    @abstractmethod
+    def _apply(self, sample: Sample) -> Sample:
+        ...
+
+
+class Noise(ApplyWithProb):
+    """Adds iid Gaussian zero-mean noise to observations."""
+
+    def __init__(self, scale: float = 0.05, p: float = 0.5) -> None:
+        super().__init__(p)
+        self.scale = scale
+
+    def _apply(self, sample: Sample) -> Sample:
         sample["x"] += torch.randn_like(sample["x"]) * self.scale
         return sample
 
 
-class Quantize:
+class Quantize(ApplyWithProb):
     """Quantizes observations to nearest multiple of bin-size"""
 
-    def __init__(self, bin_size: float = 0.05) -> None:
+    def __init__(self, bin_size: float = 0.05, p: float = 0.5) -> None:
+        super().__init__(p)
         self.bin_size = bin_size
 
-    def __call__(self, sample: Sample) -> Sample:
+    def _apply(self, sample: Sample) -> Sample:
         x = sample["x"]
         sample["x"] = torch.round(x / self.bin_size) * self.bin_size
         return sample

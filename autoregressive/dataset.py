@@ -134,6 +134,8 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
 
 
 class Noise:
+    """Adds iid Gaussian zero-mean noise to observations."""
+
     def __init__(self, scale: float = 0.05) -> None:
         self.scale = scale
 
@@ -143,6 +145,8 @@ class Noise:
 
 
 class Quantize:
+    """Quantizes observations to nearest multiple of bin-size"""
+
     def __init__(self, bin_size: float = 0.05) -> None:
         self.bin_size = bin_size
 
@@ -153,6 +157,7 @@ class Quantize:
 
 
 def chain_transforms(*args: Sequence[Sample]):
+    """Composition of transformations"""
     ts = list(args)
 
     def transform(sample: Sample) -> Sample:

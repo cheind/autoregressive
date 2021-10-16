@@ -1,10 +1,12 @@
-from matplotlib.pyplot import cohere
+from collections.abc import Sequence
+from typing import Any, Callable, Dict, Iterator, Tuple, Union
+
 import torch
 import torch.utils.data
-from collections.abc import Sequence
-from typing import Iterator, Union, Tuple
 
-from .fseries import fseries_amp_phase, PI
+from .fseries import PI, fseries_amp_phase
+
+Sample = Dict[str, Any]
 
 
 class FSeriesDataset(torch.utils.data.Dataset):
@@ -15,12 +17,14 @@ class FSeriesDataset(torch.utils.data.Dataset):
         num_samples: int = 500,
         noise: float = 5e-2,
         seed: int = None,
+        include_params: bool = False,
     ) -> None:
         super().__init__()
         self.num_terms = num_terms
         self.num_samples = num_samples
         self.num_curves = num_curves
         self.noise = noise
+        self.include_params = include_params
         if seed:
             torch.random.manual_seed(seed)
 
@@ -51,11 +55,10 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         bias_range: Union[float, Tuple[float, float]] = 0.0,
         coeff_range: Union[float, Tuple[float, float]] = (-1.0, 1.0),
         phase_range: Union[float, Tuple[float, float]] = (-PI, PI),
-        noise: float = 0.0,
         smoothness: float = 0.0,
         seed: int = None,
-        return_time: bool = False,
-        return_params: bool = False,
+        transform: Callable[[Sample], Sample] = None,
+        include_params: bool = False,
     ) -> None:
         super().__init__()
         eps = torch.finfo(torch.float32).eps
@@ -71,13 +74,12 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         self.coeff_range = _make_range(coeff_range, eps)
         self.phase_range = _make_range(phase_range, eps)
         self.num_samples = num_samples
-        self.noise = noise
         self.seed = seed
         self.smoothness = smoothness
-        self.return_time = return_time
-        self.return_params = return_params
+        self.transform = transform
+        self.include_params = include_params
 
-    def __iter__(self) -> Iterator[Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    def __iter__(self) -> Iterator[Sample]:
         g = torch.Generator()
         if self.seed is not None:
             g.manual_seed(self.seed)
@@ -90,13 +92,17 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
             z = fseries_amp_phase(
                 p["bias"], n, p["coeffs"], p["phase"], p["period"], t
             )[0]
-            x = z + torch.randn(self.num_samples) * self.noise
-            yr = [x[:-1], z[1:]]
-            if self.return_time:
-                yr.append(t)
-            if self.return_params:
-                yr.append(p)
-            yield yr
+            sample = {
+                "x": z[:-1],
+                "y": z[1:],
+                "tx": t[:-1],
+                "ty": t[1:],
+            }
+            if self.include_params:
+                sample["p"] = p
+            if self.transform is not None:
+                sample = self.transform(sample)
+            yield sample
 
     def _sample_params(self, g: torch.Generator):
         terms = torch.randint(
@@ -127,6 +133,36 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         }
 
 
+class Noise:
+    def __init__(self, scale: float = 0.05) -> None:
+        self.scale = scale
+
+    def __call__(self, sample: Sample) -> Sample:
+        sample["x"] += torch.randn_like(sample["x"]) * self.scale
+        return sample
+
+
+class Quantize:
+    def __init__(self, bin_size: float = 0.05) -> None:
+        self.bin_size = bin_size
+
+    def __call__(self, sample: Sample) -> Sample:
+        x = sample["x"]
+        sample["x"] = torch.round(x / self.bin_size) * self.bin_size
+        return sample
+
+
+def chain_transforms(*args: Sequence[Sample]):
+    ts = list(args)
+
+    def transform(sample: Sample) -> Sample:
+        for t in ts:
+            sample = t(sample)
+        return sample
+
+    return transform
+
+
 def main():
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import ImageGrid
@@ -137,11 +173,12 @@ def main():
         bias_range=(-1.0, 1.0),
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
-        noise=0.0,
         smoothness=0.75,
-        return_time=True,
-        return_params=True,
+        # transform=chain_transforms(Noise(0.05), Quantize(0.1)),
     )
+
+    dl = torch.utils.data.DataLoader(ds, 32)
+    print(next(iter(dl)))
 
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(
@@ -150,9 +187,8 @@ def main():
     grid[0].get_yaxis().set_ticks([])
     grid[0].get_xaxis().set_ticks([])
 
-    for ax, (x, y, t, p) in zip(grid, iter(ds)):
-        ax.plot(t[:-1], x)
-        print(p)
+    for ax, s in zip(grid, iter(ds)):
+        ax.plot(s["tx"], s["x"])
     plt.show()
 
 

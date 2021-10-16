@@ -61,11 +61,11 @@ class AutoregressiveModel(pl.LightningModule):
         return self.head(self.features(x))
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
-        x, y = train_batch
+        x, y = train_batch["x"], train_batch["y"]
         y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
         n = y.shape[-1]
         y_hat = self(x.unsqueeze(1))  # .squeeze(1)
@@ -74,7 +74,7 @@ class AutoregressiveModel(pl.LightningModule):
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        x, y = val_batch
+        x, y = val_batch["x"], val_batch["y"]
         y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
         n = y.shape[-1]
         y_hat = self(x.unsqueeze(1))
@@ -85,45 +85,76 @@ class AutoregressiveModel(pl.LightningModule):
 
 def train(args):
     import torch.utils.data as data
-    from .dataset import FSeriesDataset
+    from .dataset import FSeriesIterableDataset, PI, Noise
     from pytorch_lightning.callbacks import ModelCheckpoint
 
     logging.basicConfig(level=logging.INFO)
 
     batch_size = 16
-    dataset_train = FSeriesDataset(num_curves=4096, num_terms=5, noise=1e-2)
-    dataset_val = FSeriesDataset(num_curves=4096, num_terms=5, noise=0)
+    dataset_train = FSeriesIterableDataset(
+        num_terms=(3, 8),
+        num_samples=500,
+        period_range=(10.0, 12.0),
+        bias_range=(-1.0, 1.0),
+        coeff_range=(-1.0, 1.0),
+        phase_range=(-PI, PI),
+        smoothness=0.75,
+        transform=Noise(1e-3),
+    )
+
+    dataset_val = FSeriesIterableDataset(
+        num_terms=(3, 8),
+        num_samples=500,
+        period_range=(10.0, 12.0),
+        bias_range=(-1.0, 1.0),
+        coeff_range=(-1.0, 1.0),
+        phase_range=(-PI, PI),
+        smoothness=0.75,
+    )
     train_loader = data.DataLoader(dataset_train, batch_size, num_workers=0)
     val_loader = data.DataLoader(dataset_val, batch_size, num_workers=0)
 
     net = AutoregressiveModel(
         in_channels=1,
-        hidden_channels=64,
+        hidden_channels=128,
         forecast_steps=64,
         kernel_size=2,
         num_layers=7,
     )
     ckpt = ModelCheckpoint(
         monitor="val_loss",
-        filename="autoreg-{epoch:02d}-{val_loss:.4f}",
+        filename="autoreg-{step:05d}-{val_loss:.4f}",
     )
-    trainer = pl.Trainer(gpus=1, callbacks=[ckpt], max_epochs=10)
+    trainer = pl.Trainer(
+        gpus=1,
+        callbacks=[ckpt],
+        val_check_interval=1024,
+        limit_val_batches=256,
+    )
     trainer.fit(net, train_dataloader=train_loader, val_dataloaders=val_loader)
     print(ckpt.best_model_path)
 
 
 def eval(args):
     import matplotlib.pyplot as plt
-    from .dataset import FSeriesDataset
+    from .dataset import FSeriesIterableDataset, PI
 
     # torch.random.manual_seed(123)
     net = AutoregressiveModel.load_from_checkpoint(args.ckpt)
     net.eval()
-    data = FSeriesDataset(num_curves=4096, noise=0.0, num_terms=5)
 
-    for i in range(10):
-        x, y = data[i]
-        t = torch.linspace(0, 10, 500)
+    dataset_val = FSeriesIterableDataset(
+        num_terms=(3, 8),
+        num_samples=500,
+        period_range=(10.0, 12.0),
+        bias_range=(-1.0, 1.0),
+        coeff_range=(-1.0, 1.0),
+        phase_range=(-PI, PI),
+        smoothness=0.75,
+    )
+
+    for s in dataset_val:
+        x, y, tx, ty = s["x"], s["y"], s["tx"], s["ty"]
 
         # Assert no data leakage
         # print(net(y[:201].unsqueeze(0).unsqueeze(0))[0, 0, 200])
@@ -138,9 +169,10 @@ def eval(args):
             mu = net(yhat[:see].view(1, 1, -1))[0, :, -1]
             yhat[see : see + pred] = mu
 
-        plt.plot(t, y, c="k")
-        plt.plot(t[:see], yhat[:see])
-        plt.plot(t[see : see + pred], yhat[see : see + pred])
+        plt.plot(ty, y, c="k")
+        plt.plot(tx[:see], yhat[:see])
+        plt.plot(tx[see : see + pred], yhat[see : see + pred])
+        plt.ylim(-2, 2)
         plt.show()
 
 

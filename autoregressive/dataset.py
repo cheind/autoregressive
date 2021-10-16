@@ -47,6 +47,8 @@ class FSeriesDataset(torch.utils.data.Dataset):
 
 
 class FSeriesIterableDataset(torch.utils.data.IterableDataset):
+    """A randomized Fourier series dataset."""
+
     def __init__(
         self,
         num_terms: Union[int, Tuple[int, int]] = 3,
@@ -80,6 +82,7 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         self.include_params = include_params
 
     def __iter__(self) -> Iterator[Sample]:
+        """Returns an iterator over curve samples."""
         g = torch.Generator()
         if self.seed is not None:
             g.manual_seed(self.seed)
@@ -104,7 +107,8 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
                 sample = self.transform(sample)
             yield sample
 
-    def _sample_params(self, g: torch.Generator):
+    def _sample_params(self, g: torch.Generator) -> Dict[str, Any]:
+        """Returns sampled fseries parameters."""
         terms = torch.randint(
             self.num_terms[0], self.num_terms[1] + 1, (1,), generator=g
         ).item()
@@ -179,11 +183,11 @@ def main():
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
-        # transform=chain_transforms(Noise(0.05), Quantize(0.1)),
+        # transform=chain_transforms(Noise(0.05), Quantize(0.2)),
     )
 
-    dl = torch.utils.data.DataLoader(ds, 32)
-    print(next(iter(dl)))
+    # dl = torch.utils.data.DataLoader(ds, 32)
+    # print(next(iter(dl)))
 
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(

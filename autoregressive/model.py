@@ -1,12 +1,10 @@
-import torch
-import torch.nn
-from torch.nn.modules import module
-import torch.optim
-import torch.nn.functional as F
-import pytorch_lightning as pl
-import numpy as np
 import logging
 
+import pytorch_lightning as pl
+import torch
+import torch.nn
+import torch.nn.functional as F
+import torch.optim
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -18,6 +16,11 @@ _logger.setLevel(logging.INFO)
 # https://github.com/ButterscotchVanilla/Wavenet-PyTorch/blob/master/wavenet/models.py
 # https://github.com/tomlepaine/fast-wavenet
 # https://github.com/ibab/tensorflow-wavenet/blob/master/wavenet/model.py#L118
+# https://github.com/ibab/tensorflow-wavenet/issues/98
+# https://arxiv.org/pdf/1703.04691.pdf
+# https://github.com/litanli/wavenet-time-series-forecasting/blob/master/wavenet_pytorch.py
+# https://reposhub.com/python/deep-learning/EvilPsyCHo-Deep-Time-Series-Prediction.html
+# https://github.com/EvilPsyCHo/Deep-Time-Series-Prediction/blob/f6a6da060bb3f7d07f2a61967ee6007e9821064e/deepseries/nn/cnn.py#L122
 
 from . import layers
 
@@ -30,6 +33,8 @@ class AutoregressiveModel(pl.LightningModule):
         forecast_steps: int = 1,
         kernel_size: int = 2,
         num_layers: int = 10,
+        head_activation: bool = False,
+        loss_require_full_receptive_field: bool = True,
     ) -> None:
         super().__init__()
 
@@ -55,21 +60,29 @@ class AutoregressiveModel(pl.LightningModule):
         ) + 1
         _logger.info(f"Receptive field of model {self.receptive_field}")
         self.forecast_steps = forecast_steps
+        self.head_activation = head_activation
+        self.loss_require_full_receptive_field = loss_require_full_receptive_field
         self.save_hyperparameters()
 
     def forward(self, x):
-        return self.head(self.features(x))
+        h = self.head(self.features(x))
+        if self.head_activation:
+            h = torch.tanh(h)
+        return h
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=1e-4)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
         x, y = train_batch["x"], train_batch["y"]
         y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
         n = y.shape[-1]
+        r = 0
+        if self.loss_require_full_receptive_field:
+            r = self.receptive_field
         y_hat = self(x.unsqueeze(1))  # .squeeze(1)
-        loss = F.smooth_l1_loss(y_hat[..., :n], y)
+        loss = F.l1_loss(y_hat[..., r:n], y[..., r:])
         self.log("train_loss", loss)
         return loss
 
@@ -77,16 +90,51 @@ class AutoregressiveModel(pl.LightningModule):
         x, y = val_batch["x"], val_batch["y"]
         y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
         n = y.shape[-1]
+        r = 0
+        if self.loss_require_full_receptive_field:
+            r = self.receptive_field
         y_hat = self(x.unsqueeze(1))
-        loss = F.smooth_l1_loss(y_hat[..., :n], y)
+        loss = F.l1_loss(y_hat[..., r:n], y[..., r:])
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
 
+class NStepPrediction:
+    """Predict n-steps using direct model output"""
+
+    def __init__(self, model: AutoregressiveModel) -> None:
+        self.model = model
+        self.model.eval()
+
+    @torch.no_grad()
+    def predict(self, x: torch.Tensor, horizon: int) -> torch.Tensor:
+        assert horizon <= self.model.forecast_steps
+        x = x.view((1, 1, -1))
+        y = self.model(x)[0, :horizon, -1]
+        return y
+
+
+class NaiveGeneration:
+    def __init__(self, model: AutoregressiveModel) -> None:
+        self.model = model
+        self.model.eval()
+
+    @torch.no_grad()
+    def predict(self, x: torch.Tensor, horizon: int) -> torch.Tensor:
+        r = self.model.receptive_field
+        y = x.new_empty(r + horizon)
+        y[:r] = x[-r:]  # Copy last `see` observations
+        for h in range(horizon):
+            p = self.model(y[h : h + r].view(1, 1, -1))
+            y[h + r] = p[0, 0, -1]
+        return y[r:]
+
+
 def train(args):
     import torch.utils.data as data
-    from .dataset import FSeriesIterableDataset, PI, Noise
     from pytorch_lightning.callbacks import ModelCheckpoint
+
+    from .dataset import PI, FSeriesIterableDataset, Noise
 
     logging.basicConfig(level=logging.INFO)
 
@@ -124,6 +172,8 @@ def train(args):
         forecast_steps=128,
         kernel_size=2,
         num_layers=7,
+        head_activation=False,
+        loss_require_full_receptive_field=True,
     )
     ckpt = ModelCheckpoint(
         monitor="val_loss",
@@ -141,13 +191,18 @@ def train(args):
 
 def eval(args):
     import matplotlib.pyplot as plt
-    from .dataset import FSeriesIterableDataset, PI, Noise
+    from mpl_toolkits.axes_grid1 import ImageGrid
+
+    from .dataset import PI, FSeriesIterableDataset
 
     # torch.random.manual_seed(123)
     net = AutoregressiveModel.load_from_checkpoint(args.ckpt)
-    net.eval()
+    preds = [
+        # (NStepPrediction(net), "n-step prediction"),
+        (NaiveGeneration(net), "naive n-step generation"),
+    ]
 
-    dataset_val = FSeriesIterableDataset(
+    dataset = FSeriesIterableDataset(
         num_terms=(3, 5),
         num_samples=500,
         period_range=(10.0, 12.0),
@@ -157,7 +212,22 @@ def eval(args):
         smoothness=0.75,
     )
 
-    for s in dataset_val:
+    fig = plt.figure(figsize=(8.0, 8.0))
+    grid = ImageGrid(
+        fig=fig,
+        rect=111,
+        nrows_ncols=(8, 8),
+        axes_pad=0.05,
+        share_all=True,
+        label_mode="1",
+    )
+    grid[0].get_yaxis().set_ticks([])
+    grid[0].get_xaxis().set_ticks([])
+
+    # horizon = net.forecast_steps
+    horizon = 128
+    see = 250  # net.receptive_field
+    for ax, s in zip(grid, dataset):
         x, y, tx, ty = s["x"], s["y"], s["tx"], s["ty"]
 
         # Assert no data leakage
@@ -165,19 +235,15 @@ def eval(args):
         # print(net(y.unsqueeze(0).unsqueeze(0))[0, 0, 200])
 
         # see = np.random.randint(0, 300)
-        see = 250  # net.receptive_field
-        pred = net.forecast_steps
-        yhat = torch.empty(see + pred)
-        yhat[:see] = x[:see]
-        with torch.no_grad():
-            mu = net(yhat[:see].view(1, 1, -1))[0, :, -1]
-            yhat[see : see + pred] = mu
-
-        plt.plot(ty, y, c="k")
-        plt.plot(tx[:see], y[:see])
-        plt.plot(tx[see : see + pred], yhat[see : see + pred])
-        plt.ylim(-2, 2)
-        plt.show()
+        ax.plot(ty, y, c="k", linestyle="--", linewidth=0.5)
+        ax.plot(tx[:see], x[:see], c="k", linewidth=0.5)
+        for p, label in preds:
+            yhat = p.predict(x[:see], horizon)
+            ax.plot(tx[see : see + horizon], yhat, label=label)
+        ax.set_ylim(-2, 2)
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center")
+    plt.show()
 
 
 # pred = 250

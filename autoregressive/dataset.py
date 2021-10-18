@@ -53,7 +53,9 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
         num_terms: Union[int, Tuple[int, int]] = 3,
-        num_samples: int = 500,
+        num_tsamples: int = 500,
+        dt: float = 0.02,
+        start_trange: Union[float, Tuple[float, float]] = 0.0,
         period_range: Union[float, Tuple[float, float]] = 10.0,
         bias_range: Union[float, Tuple[float, float]] = 0.0,
         coeff_range: Union[float, Tuple[float, float]] = (-1.0, 1.0),
@@ -76,8 +78,10 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         self.bias_range = _make_range(bias_range, eps)
         self.coeff_range = _make_range(coeff_range, eps)
         self.phase_range = _make_range(phase_range, eps)
-        self.num_samples = num_samples
+        self.start_trange = _make_range(start_trange, eps)
+        self.num_tsamples = num_tsamples
         self.seed = seed
+        self.dt = dt
         self.smoothness = smoothness
         self.transform = transform
         self.include_params = include_params
@@ -88,10 +92,9 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         if self.seed is not None:
             g.manual_seed(self.seed)
 
-        t = torch.linspace(0, 10, self.num_samples)
-
         while True:
             p = self._sample_params(g)
+            t = torch.arange(p["tstart"], self.dt * self.num_tsamples, self.dt)
             n = torch.arange(p["terms"]) + 1
             z = fseries_amp_phase(
                 p["bias"], n, p["coeffs"], p["phase"], p["period"], t
@@ -110,24 +113,21 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
 
     def _sample_params(self, g: torch.Generator) -> Dict[str, Any]:
         """Returns sampled fseries parameters."""
+
+        def uniform(r, n: int):
+            return (r[1] - r[0]) * torch.rand(n, generator=g) + r[0]
+
         terms = torch.randint(
             self.num_terms[0], self.num_terms[1] + 1, (1,), generator=g
         ).item()
-        period = (self.period_range[1] - self.period_range[0]) * torch.rand(
-            1, generator=g
-        ) + self.period_range[0]
-        bias = (self.bias_range[1] - self.bias_range[0]) * torch.rand(
-            1, generator=g
-        ) + self.bias_range[0]
-        coeffs = (self.coeff_range[1] - self.coeff_range[0]) * torch.rand(
-            terms, generator=g
-        ) + self.coeff_range[0]
+        period = uniform(self.period_range, 1)
+        bias = uniform(self.bias_range, 1)
+        coeffs = uniform(self.coeff_range, terms)
         coeffs = coeffs * torch.logspace(
             0, -self.smoothness, terms
         )  # decay coefficients for higher order terms. A value of 2 will decay the last term by a factor of 0.01
-        phase = (self.phase_range[1] - self.phase_range[0]) * torch.rand(
-            terms, generator=g
-        ) + self.phase_range[0]
+        phase = uniform(self.phase_range, terms)
+        tstart = uniform(self.start_trange, 1).item()
 
         return {
             "terms": terms,
@@ -135,6 +135,7 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
             "bias": bias,
             "coeffs": coeffs,
             "phase": phase,
+            "tstart": tstart,
         }
 
 
@@ -158,7 +159,7 @@ class ApplyWithProb(ABC):
 class Noise(ApplyWithProb):
     """Adds iid Gaussian zero-mean noise to observations."""
 
-    def __init__(self, scale: float = 0.05, p: float = 0.5) -> None:
+    def __init__(self, scale: float = 1e-3, p: float = 0.5) -> None:
         super().__init__(p)
         self.scale = scale
 
@@ -197,11 +198,14 @@ def main():
     from mpl_toolkits.axes_grid1 import ImageGrid
 
     ds = FSeriesIterableDataset(
-        num_terms=(3, 8),
+        num_terms=(3, 5),
+        num_tsamples=1000,
+        dt=0.02,
         period_range=(10.0, 12.0),
         bias_range=(-1.0, 1.0),
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
+        include_params=True,
         smoothness=0.75,
         # transform=chain_transforms(Noise(0.05), Quantize(0.2)),
     )
@@ -213,11 +217,12 @@ def main():
     grid = ImageGrid(
         fig, 111, nrows_ncols=(8, 8), axes_pad=0.05, share_all=True, label_mode="1"
     )
-    grid[0].get_yaxis().set_ticks([])
-    grid[0].get_xaxis().set_ticks([])
+    # grid[0].get_yaxis().set_ticks([])
+    # grid[0].get_xaxis().set_ticks([])
 
     for ax, s in zip(grid, iter(ds)):
         ax.plot(s["tx"], s["x"])
+        print(s["p"])
     plt.show()
 
 

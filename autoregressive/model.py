@@ -5,6 +5,9 @@ import torch
 import torch.nn
 import torch.nn.functional as F
 import torch.optim
+from torch.utils import data
+
+from autoregressive import dataset
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -130,19 +133,15 @@ class NaiveGeneration:
         return y[r:]
 
 
-def train(args):
-    import torch.utils.data as data
-    from pytorch_lightning.callbacks import ModelCheckpoint
-
+def generate_datasets():
     from .dataset import PI, FSeriesIterableDataset, Noise
 
-    logging.basicConfig(level=logging.INFO)
-
-    batch_size = 64
     dataset_train = FSeriesIterableDataset(
         num_terms=(3, 5),
-        num_samples=500,
-        period_range=(10.0, 12.0),
+        num_tsamples=1000,
+        dt=0.02,
+        start_trange=0.0,
+        period_range=(20.0, 24.0),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
@@ -156,13 +155,28 @@ def train(args):
 
     dataset_val = FSeriesIterableDataset(
         num_terms=(3, 5),
-        num_samples=500,
-        period_range=(10.0, 12.0),
+        num_tsamples=1000,
+        dt=0.02,
+        start_trange=0.0,
+        period_range=(20.0, 24.0),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
     )
+
+    return dataset_train, dataset_val
+
+
+def train(args):
+    import torch.utils.data as data
+    from pytorch_lightning.callbacks import ModelCheckpoint
+
+    logging.basicConfig(level=logging.INFO)
+
+    batch_size = 64
+
+    dataset_train, dataset_val = generate_datasets()
     train_loader = data.DataLoader(dataset_train, batch_size, num_workers=0)
     val_loader = data.DataLoader(dataset_val, batch_size, num_workers=0)
 
@@ -171,7 +185,7 @@ def train(args):
         hidden_channels=128,
         forecast_steps=128,
         kernel_size=2,
-        num_layers=7,
+        num_layers=9,
         head_activation=False,
         loss_require_full_receptive_field=True,
     )
@@ -198,25 +212,17 @@ def eval(args):
     # torch.random.manual_seed(123)
     net = AutoregressiveModel.load_from_checkpoint(args.ckpt)
     preds = [
-        # (NStepPrediction(net), "n-step prediction"),
-        (NaiveGeneration(net), "naive n-step generation"),
+        (NStepPrediction(net), "n-step prediction"),
+        # (NaiveGeneration(net), "naive n-step generation"),
     ]
 
-    dataset = FSeriesIterableDataset(
-        num_terms=(3, 5),
-        num_samples=500,
-        period_range=(10.0, 12.0),
-        bias_range=0,
-        coeff_range=(-1.0, 1.0),
-        phase_range=(-PI, PI),
-        smoothness=0.75,
-    )
+    _, dataset_val = generate_datasets()
 
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(
         fig=fig,
         rect=111,
-        nrows_ncols=(8, 8),
+        nrows_ncols=(4, 4),
         axes_pad=0.05,
         share_all=True,
         label_mode="1",
@@ -226,9 +232,13 @@ def eval(args):
 
     # horizon = net.forecast_steps
     horizon = 128
-    see = 250  # net.receptive_field
-    for ax, s in zip(grid, dataset):
+
+    for ax, s in zip(grid, dataset_val):
         x, y, tx, ty = s["x"], s["y"], s["tx"], s["ty"]
+
+        see = torch.randint(
+            net.receptive_field, x.shape[-1] - horizon, size=(1,)
+        ).item()
 
         # Assert no data leakage
         # print(net(y[:201].unsqueeze(0).unsqueeze(0))[0, 0, 200])
@@ -244,24 +254,6 @@ def eval(args):
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center")
     plt.show()
-
-
-# pred = 250
-# trials = 1
-# yhat = torch.empty((trials, y.shape[0]))
-# yhat[:, :see] = x[:see].unsqueeze(0)
-# # yhat[:, see - 1] += torch.randn(trials) * 1e-1
-# with torch.no_grad():
-#     for i in range(see, see + pred):
-#         # mu = net(yhat[:, :i].unsqueeze(1))[:, 0, -1]
-#         mu = net(y[:i].unsqueeze(0).unsqueeze(0))[:, 0, -1]
-#         # p = D.Normal(loc=mu, scale=torch.tensor([1e-2])).sample()
-#         yhat[:, i] = mu
-
-# plt.plot(t, y, c="k")
-# for tidx in range(trials):
-#     plt.plot(t[see : see + pred], yhat[tidx, see : see + pred])
-# plt.show()
 
 
 #  To increase reception field exponentially with linearly increasing number of parameters

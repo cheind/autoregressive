@@ -1,8 +1,16 @@
 import torch
 import torch.nn
+import torch.nn.init
 import torch.nn.functional as F
 
 from .utils import causal_pad
+
+
+def _init_weights(m):
+    """Initialize conv1d with Xavier_uniform weight and 0 bias."""
+    if isinstance(m, torch.nn.Conv1d):
+        torch.nn.init.xavier_uniform_(m.weight)
+        torch.nn.init.constant_(m.bias, 0.0)
 
 
 class WaveNetLayer(torch.nn.Module):
@@ -23,7 +31,7 @@ class WaveNetLayer(torch.nn.Module):
         self.conv_tanh = torch.nn.Conv1d(
             residual_channels,
             residual_channels,
-            kernel_size=2,
+            kernel_size=1,
         )
         self.conv_sig = torch.nn.Conv1d(
             residual_channels,
@@ -68,9 +76,9 @@ class WaveNetBackbone(torch.nn.Module):
                     residual_channels=residual_channels,
                     skip_channels=skip_channels,
                 )
+                for _ in range(num_blocks)
+                for d in range(num_layers)
             ]
-            for _ in range(num_blocks)
-            for d in range(num_layers)
         )
         kernel_size = 2
         self.receptive_field = (kernel_size - 1) * sum(
@@ -86,11 +94,11 @@ class WaveNetBackbone(torch.nn.Module):
         return skip_aggregate
 
 
-class WaveNetForecaster(torch.nn.Module):
+class WaveNetLinear(torch.nn.Module):
     def __init__(
         self,
         in_channels: int = 1,
-        forecast_steps: int = 64,
+        out_channels: int = 64,
         residual_channels: int = 32,
         skip_channels: int = 32,
         num_blocks: int = 1,
@@ -101,8 +109,9 @@ class WaveNetForecaster(torch.nn.Module):
             in_channels, residual_channels, skip_channels, num_blocks, num_layers
         )
         self.conv_mid = torch.nn.Conv1d(skip_channels, skip_channels, kernel_size=1)
-        self.conv_output = torch.nn.Conv1d(skip_channels, forecast_steps, kernel_size=1)
-        self.forecast_steps = forecast_steps
+        self.conv_output = torch.nn.Conv1d(skip_channels, out_channels, kernel_size=1)
+        self.out_channels = out_channels
+        self.apply(_init_weights)
 
     def forward(self, x):
         x = self.features(x)

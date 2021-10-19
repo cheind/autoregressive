@@ -104,28 +104,114 @@ class AutoregressiveModel(pl.LightningModule):
         return loss
 
 
+from .wave import WaveNetLinear
+
+
+class WaveNet(pl.LightningModule):
+    def __init__(
+        self,
+        in_channels: int = 1,
+        forecast_steps: int = 64,
+        residual_channels: int = 32,
+        skip_channels: int = 32,
+        num_blocks: int = 1,
+        num_layers: int = 7,
+        loss_require_full_receptive_field: bool = True,
+        use_tanh_activation: bool = False,
+    ) -> None:
+        super().__init__()
+        self.wave = WaveNetLinear(
+            in_channels,
+            forecast_steps,
+            residual_channels,
+            skip_channels,
+            num_blocks,
+            num_layers,
+        )
+        self.forecast_steps = forecast_steps
+        self.loss_require_full_receptive_field = loss_require_full_receptive_field
+        self.receptive_field = self.wave.receptive_field
+        self.use_tanh_activation = use_tanh_activation
+        self.use_positional_encoding = in_channels > 1
+        _logger.info(f"Receptive field of model {self.receptive_field}")
+        super().save_hyperparameters()
+
+    def forward(self, x):
+        h = self.wave(x)
+        if self.use_tanh_activation:
+            h = torch.tanh(h)
+        return h
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
+        return optimizer
+
+    def training_step(self, batch, batch_idx):
+        x = batch["x"][..., :-1]
+        t = batch["t"][..., :-1]
+        y = batch["xo"][..., 1:]
+        y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
+        n = y.shape[-1]
+        r = 0
+        if self.loss_require_full_receptive_field:
+            r = self.receptive_field
+        x = x.unsqueeze(1)
+        t = t.unsqueeze(1)
+        if self.use_positional_encoding:
+            y_hat = self(torch.cat((x, t), 1))
+        else:
+            y_hat = self(x)
+        loss = F.l1_loss(y_hat[..., r:n], y[..., r:])
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x = batch["x"][..., :-1]
+        t = batch["t"][..., :-1]
+        y = batch["xo"][..., 1:]
+        y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
+        n = y.shape[-1]
+        r = 0
+        if self.loss_require_full_receptive_field:
+            r = self.receptive_field
+        x = x.unsqueeze(1)
+        t = t.unsqueeze(1)
+        if self.use_positional_encoding:
+            y_hat = self(torch.cat((x, t), 1))
+        else:
+            y_hat = self(x)
+        loss = F.l1_loss(y_hat[..., r:n], y[..., r:])
+        self.log("val_loss", loss, prog_bar=True)
+        return loss
+
+
 class NStepPrediction:
     """Predict n-steps using direct model output"""
 
-    def __init__(self, model: AutoregressiveModel) -> None:
+    def __init__(self, model: WaveNet) -> None:
         self.model = model
         self.model.eval()
 
     @torch.no_grad()
-    def predict(self, x: torch.Tensor, horizon: int) -> torch.Tensor:
+    def predict(self, x: torch.Tensor, t: torch.Tensor, horizon: int) -> torch.Tensor:
         assert horizon <= self.model.forecast_steps
         x = x.view((1, 1, -1))
-        y = self.model(x)[0, :horizon, -1]
-        return y
+        t = t.view((1, 1, -1))
+        if self.model.use_positional_encoding:
+            y = self.model(torch.cat((x, t), 1))
+        else:
+            y = self.model(x)
+        return y[0, :horizon, -1]
 
 
 class NaiveGeneration:
-    def __init__(self, model: AutoregressiveModel) -> None:
+    def __init__(self, model: WaveNet) -> None:
         self.model = model
         self.model.eval()
+        assert not self.model.use_positional_encoding
 
     @torch.no_grad()
-    def predict(self, x: torch.Tensor, horizon: int) -> torch.Tensor:
+    def predict(self, x: torch.Tensor, t: torch.Tensor, horizon: int) -> torch.Tensor:
         r = self.model.receptive_field
         y = x.new_empty(r + horizon)
         y[:r] = x[-r:]  # Copy last `see` observations
@@ -139,7 +225,7 @@ def generate_datasets():
     from .dataset import PI, FSeriesIterableDataset, Noise
 
     dataset_train = FSeriesIterableDataset(
-        num_terms=(3, 5),
+        num_terms=3,
         num_tsamples=1024,
         dt=0.02,
         start_trange=0.0,
@@ -148,7 +234,7 @@ def generate_datasets():
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
-        transform=Noise(scale=1e-3, p=0.25),
+        # transform=Noise(scale=1e-4, p=0.25),
     )
     # Note, using fixed noise with probability 1, will teach the model
     # to always account for that noise level. When you then turn off the
@@ -156,8 +242,8 @@ def generate_datasets():
     # more noisy. Hence, we add noise only once in a while.
 
     dataset_val = FSeriesIterableDataset(
-        num_terms=(3, 5),
-        num_tsamples=1000,
+        num_terms=3,
+        num_tsamples=1024,
         dt=0.02,
         start_trange=0.0,
         period_range=(5.0, 10.0),
@@ -182,24 +268,34 @@ def train(args):
     train_loader = data.DataLoader(dataset_train, batch_size, num_workers=0)
     val_loader = data.DataLoader(dataset_val, batch_size, num_workers=0)
 
-    net = AutoregressiveModel(
+    # net = AutoregressiveModel(
+    #     in_channels=1,
+    #     hidden_channels=128,
+    #     forecast_steps=384,
+    #     kernel_size=2,
+    #     num_layers=9,
+    #     head_activation=False,
+    #     loss_require_full_receptive_field=True,
+    # )
+    net = WaveNet(
         in_channels=1,
-        hidden_channels=128,
-        forecast_steps=384,
-        kernel_size=2,
+        forecast_steps=1,
+        residual_channels=64,
+        skip_channels=64,
+        num_blocks=1,
         num_layers=9,
-        head_activation=False,
         loss_require_full_receptive_field=True,
+        use_tanh_activation=False,  # dont use unless you know the function is bound between -1/1
     )
     ckpt = ModelCheckpoint(
         monitor="val_loss",
-        filename="autoreg-{step:05d}-{val_loss:.4f}",
+        filename="wave-{step:05d}-{val_loss:.4f}",
     )
     trainer = pl.Trainer(
         gpus=1,
         callbacks=[ckpt],
-        val_check_interval=4096 / batch_size,
-        limit_val_batches=1024 / batch_size,
+        val_check_interval=2 ** 13 / batch_size,
+        limit_val_batches=2 ** 11 / batch_size,
     )
     trainer.fit(net, train_dataloader=train_loader, val_dataloaders=val_loader)
     print(ckpt.best_model_path)
@@ -212,10 +308,10 @@ def eval(args):
     from .dataset import PI, FSeriesIterableDataset
 
     # torch.random.manual_seed(123)
-    net = AutoregressiveModel.load_from_checkpoint(args.ckpt)
+    net = WaveNet.load_from_checkpoint(args.ckpt)
     preds = [
-        (NStepPrediction(net), "n-step prediction"),
-        # (NaiveGeneration(net), "naive n-step generation"),
+        # (NStepPrediction(net), "n-step prediction"),
+        (NaiveGeneration(net), "naive n-step generation"),
     ]
 
     _, dataset_val = generate_datasets()
@@ -224,7 +320,7 @@ def eval(args):
     grid = ImageGrid(
         fig=fig,
         rect=111,
-        nrows_ncols=(4, 4),
+        nrows_ncols=(2, 2),
         axes_pad=0.05,
         share_all=True,
         label_mode="1",
@@ -233,7 +329,8 @@ def eval(args):
     grid[0].get_xaxis().set_ticks([])
 
     # horizon = net.forecast_steps
-    horizon = net.forecast_steps
+    # horizon = net.forecast_steps
+    horizon = 511
 
     for ax, s in zip(grid, dataset_val):
         x, xo, t = s["x"], s["xo"], s["t"]
@@ -246,7 +343,7 @@ def eval(args):
         ax.plot(t, xo, c="k", linestyle="--", linewidth=0.5)
         ax.plot(t[:see], x[:see], c="k", linewidth=0.5)
         for p, label in preds:
-            y = p.predict(x[:see], horizon)
+            y = p.predict(x[:see], t[:see], horizon)
             ax.plot(t[see : see + horizon], y, label=label)
         ax.set_ylim(-2, 2)
     handles, labels = ax.get_legend_handles_labels()

@@ -1,8 +1,7 @@
 import torch
 import torch.nn
-import torch.nn.functional as F
 
-from ..layers import causal_pad
+from ..utils import causal_pad
 
 
 @torch.no_grad()

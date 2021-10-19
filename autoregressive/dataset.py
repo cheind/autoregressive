@@ -155,6 +155,39 @@ def chain_transforms(*args: Sequence[Sample]):
     return transform
 
 
+def create_default_datasets():
+    dataset_train = FSeriesIterableDataset(
+        num_terms=3,
+        num_tsamples=1024,
+        dt=0.02,
+        start_trange=0.0,
+        period_range=(5.0, 10.0),
+        bias_range=0,
+        coeff_range=(-1.0, 1.0),
+        phase_range=(-PI, PI),
+        smoothness=0.75,
+        # transform=Noise(scale=1e-4, p=0.25),
+    )
+    # Note, using fixed noise with probability 1, will teach the model
+    # to always account for that noise level. When you then turn off the
+    # noise in evaluation, the models predictions will be significantly
+    # more noisy. Hence, we add noise only once in a while.
+
+    dataset_val = FSeriesIterableDataset(
+        num_terms=3,
+        num_tsamples=1024,
+        dt=0.02,
+        start_trange=0.0,
+        period_range=(5.0, 10.0),
+        bias_range=0,
+        coeff_range=(-1.0, 1.0),
+        phase_range=(-PI, PI),
+        smoothness=0.75,
+    )
+
+    return dataset_train, dataset_val
+
+
 def main():
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import ImageGrid

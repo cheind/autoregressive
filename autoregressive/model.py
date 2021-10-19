@@ -265,8 +265,8 @@ def train(args):
     batch_size = 64
 
     dataset_train, dataset_val = generate_datasets()
-    train_loader = data.DataLoader(dataset_train, batch_size, num_workers=0)
-    val_loader = data.DataLoader(dataset_val, batch_size, num_workers=0)
+    train_loader = data.DataLoader(dataset_train, batch_size, num_workers=4)
+    val_loader = data.DataLoader(dataset_val, batch_size, num_workers=4)
 
     # net = AutoregressiveModel(
     #     in_channels=1,
@@ -280,7 +280,7 @@ def train(args):
     net = WaveNet(
         in_channels=1,
         forecast_steps=1,
-        residual_channels=64,
+        residual_channels=128,
         skip_channels=64,
         num_blocks=1,
         num_layers=9,

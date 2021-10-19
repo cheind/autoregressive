@@ -140,10 +140,10 @@ def generate_datasets():
 
     dataset_train = FSeriesIterableDataset(
         num_terms=(3, 5),
-        num_tsamples=1000,
+        num_tsamples=1024,
         dt=0.02,
         start_trange=0.0,
-        period_range=(20.0, 24.0),
+        period_range=(5.0, 10.0),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
@@ -160,7 +160,7 @@ def generate_datasets():
         num_tsamples=1000,
         dt=0.02,
         start_trange=0.0,
-        period_range=(20.0, 24.0),
+        period_range=(5.0, 10.0),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
@@ -185,7 +185,7 @@ def train(args):
     net = AutoregressiveModel(
         in_channels=1,
         hidden_channels=128,
-        forecast_steps=128,
+        forecast_steps=384,
         kernel_size=2,
         num_layers=9,
         head_activation=False,
@@ -233,7 +233,7 @@ def eval(args):
     grid[0].get_xaxis().set_ticks([])
 
     # horizon = net.forecast_steps
-    horizon = 128
+    horizon = net.forecast_steps
 
     for ax, s in zip(grid, dataset_val):
         x, xo, t = s["x"], s["xo"], s["t"]

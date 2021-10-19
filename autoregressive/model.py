@@ -77,8 +77,9 @@ class AutoregressiveModel(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-    def training_step(self, train_batch, batch_idx):
-        x, y = train_batch["x"], train_batch["y"]
+    def training_step(self, batch, batch_idx):
+        x = batch["x"][..., :-1]
+        y = batch["xo"][..., 1:]
         y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
         n = y.shape[-1]
         r = 0
@@ -89,8 +90,9 @@ class AutoregressiveModel(pl.LightningModule):
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, val_batch, batch_idx):
-        x, y = val_batch["x"], val_batch["y"]
+    def validation_step(self, batch, batch_idx):
+        x = batch["x"][..., :-1]
+        y = batch["xo"][..., 1:]
         y = y.unfold(-1, self.forecast_steps, 1).permute(0, 2, 1)
         n = y.shape[-1]
         r = 0
@@ -234,22 +236,18 @@ def eval(args):
     horizon = 128
 
     for ax, s in zip(grid, dataset_val):
-        x, y, tx, ty = s["x"], s["y"], s["tx"], s["ty"]
+        x, xo, t = s["x"], s["xo"], s["t"]
 
         see = torch.randint(
             net.receptive_field, x.shape[-1] - horizon, size=(1,)
         ).item()
 
-        # Assert no data leakage
-        # print(net(y[:201].unsqueeze(0).unsqueeze(0))[0, 0, 200])
-        # print(net(y.unsqueeze(0).unsqueeze(0))[0, 0, 200])
-
         # see = np.random.randint(0, 300)
-        ax.plot(ty, y, c="k", linestyle="--", linewidth=0.5)
-        ax.plot(tx[:see], x[:see], c="k", linewidth=0.5)
+        ax.plot(t, xo, c="k", linestyle="--", linewidth=0.5)
+        ax.plot(t[:see], x[:see], c="k", linewidth=0.5)
         for p, label in preds:
-            yhat = p.predict(x[:see], horizon)
-            ax.plot(tx[see : see + horizon], yhat, label=label)
+            y = p.predict(x[:see], horizon)
+            ax.plot(t[see : see + horizon], y, label=label)
         ax.set_ylim(-2, 2)
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center")

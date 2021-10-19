@@ -96,15 +96,10 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
             p = self._sample_params(g)
             t = torch.arange(p["tstart"], self.dt * self.num_tsamples, self.dt)
             n = torch.arange(p["terms"]) + 1
-            z = fseries_amp_phase(
+            x = fseries_amp_phase(
                 p["bias"], n, p["coeffs"], p["phase"], p["period"], t
             )[0]
-            sample = {
-                "x": z[:-1],
-                "y": z[1:].clone(),
-                "tx": t[:-1],
-                "ty": t[1:],
-            }
+            sample = {"x": x, "xo": x.clone(), "t": t}
             if self.include_params:
                 sample["p"] = p
             if self.transform is not None:
@@ -159,7 +154,7 @@ class ApplyWithProb(ABC):
 class Noise(ApplyWithProb):
     """Adds iid Gaussian zero-mean noise to observations."""
 
-    def __init__(self, scale: float = 1e-3, p: float = 0.5) -> None:
+    def __init__(self, scale: float = 1e-3, p: float = 1.0) -> None:
         super().__init__(p)
         self.scale = scale
 
@@ -199,7 +194,7 @@ def main():
 
     ds = FSeriesIterableDataset(
         num_terms=(3, 5),
-        num_tsamples=1000,
+        num_tsamples=500,
         dt=0.02,
         period_range=(10.0, 12.0),
         bias_range=(-1.0, 1.0),
@@ -207,23 +202,20 @@ def main():
         phase_range=(-PI, PI),
         include_params=True,
         smoothness=0.75,
-        # transform=chain_transforms(Noise(0.05), Quantize(0.2)),
+        transform=Quantize(0.2, p=1.0),
     )
-
-    # dl = torch.utils.data.DataLoader(ds, 32)
-    # print(next(iter(dl)))
 
     fig = plt.figure(figsize=(8.0, 8.0))
-    grid = ImageGrid(
-        fig, 111, nrows_ncols=(8, 8), axes_pad=0.05, share_all=True, label_mode="1"
-    )
-    # grid[0].get_yaxis().set_ticks([])
-    # grid[0].get_xaxis().set_ticks([])
+    grid = ImageGrid(fig, 111, nrows_ncols=(4, 4), axes_pad=0.05, share_all=False)
 
     for ax, s in zip(grid, iter(ds)):
-        ax.plot(s["tx"], s["x"])
+        ax.plot(s["t"], s["x"])
+        ax.plot(s["t"], s["xo"])
         print(s["p"])
     plt.show()
+
+    # z[:-1],
+    # "y": z[1:].clone(),
 
 
 if __name__ == "__main__":

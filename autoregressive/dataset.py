@@ -85,15 +85,19 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
         self.smoothness = smoothness
         self.transform = transform
         self.include_params = include_params
+        self.rng = None
 
     def __iter__(self) -> Iterator[Sample]:
         """Returns an iterator over curve samples."""
-        g = torch.Generator()
-        if self.seed is not None:
-            g.manual_seed(self.seed)
+        seed = self.seed
+        if self.rng is None:
+            if seed is None:
+                seed = torch.random.seed()
+            self.rng = torch.Generator()
+            self.rng.manual_seed(seed)
 
         while True:
-            p = self._sample_params(g)
+            p = self._sample_params(self.rng)
             t = torch.arange(p["tstart"], self.dt * self.num_tsamples, self.dt)
             n = torch.arange(p["terms"]) + 1
             x = fseries_amp_phase(
@@ -200,10 +204,17 @@ def main():
         bias_range=(-1.0, 1.0),
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
-        include_params=True,
+        # include_params=True,
         smoothness=0.75,
         transform=Quantize(0.2, p=1.0),
     )
+
+    # dl = torch.utils.data.DataLoader(ds, batch_size=4, num_workers=4)
+    # data = next(iter(dl))
+    # print(data["x"][..., :10])
+    # dl = torch.utils.data.DataLoader(ds, batch_size=4, num_workers=4)
+    # data = next(iter(dl))
+    # print(data["x"][..., :10])
 
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(fig, 111, nrows_ncols=(4, 4), axes_pad=0.05, share_all=False)
@@ -211,7 +222,6 @@ def main():
     for ax, s in zip(grid, iter(ds)):
         ax.plot(s["t"], s["x"])
         ax.plot(s["t"], s["xo"])
-        print(s["p"])
     plt.show()
 
     # z[:-1],

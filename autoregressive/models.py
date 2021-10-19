@@ -46,7 +46,7 @@ class RegressionWaveNet(pl.LightningModule):
     def configure_optimizers(self):
         import torch.optim.lr_scheduler as sched
 
-        opt = torch.optim.Adam(self.parameters(), lr=1e-4)
+        opt = torch.optim.Adam(self.parameters(), lr=1e-3)
         return {
             "optimizer": opt,
             "lr_scheduler": {

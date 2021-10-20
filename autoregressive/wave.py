@@ -115,8 +115,8 @@ class WaveNetLinear(torch.nn.Module):
 
     def forward(self, x):
         x = self.features(x)
-        x = F.relu(x)
-        x = F.relu(self.conv_mid(x))
+        x = F.gelu(x)
+        x = F.gelu(self.conv_mid(x))
         x = self.conv_output(x)
         return x
 

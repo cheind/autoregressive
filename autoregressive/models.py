@@ -175,12 +175,16 @@ class NaiveGeneration:
 
     @torch.no_grad()
     def predict(self, x: torch.Tensor, t: torch.Tensor, horizon: int) -> torch.Tensor:
+        import time
+
+        t0 = time.time()
         r = self.model.receptive_field
         y = x.new_empty(r + horizon)
         y[:r] = x[-r:]  # Copy last `see` observations
         for h in range(horizon):
             p = self.model(y[h : h + r].view(1, 1, -1))
             y[h + r] = p[0, 0, -1]
+        print("naive took", (time.time() - t0))
         return y[r:]
 
 
@@ -191,6 +195,9 @@ class FastGeneration:
 
     @torch.no_grad()
     def predict(self, x: torch.Tensor, t: torch.Tensor, horizon: int) -> torch.Tensor:
+        import time
+
+        t0 = time.time()
         queues = self.model.create_fast_queues(x.device)
         r = self.model.receptive_field
         y = x.new_empty(r + horizon)
@@ -201,6 +208,7 @@ class FastGeneration:
         for h in range(horizon):
             p, queues = self.model.forward_fast(y[r + h - 1].view(1, 1, 1), queues)
             y[h + r] = p[0, 0, -1]
+        print("fast took", (time.time() - t0))
         return y[r:]
 
 
@@ -250,7 +258,7 @@ def eval(args):
     grid[0].get_xaxis().set_ticks([])
 
     # horizon = net.forecast_steps
-    horizon = 128
+    horizon = 511
 
     for ax, s in zip(grid, dataset_val):
         x, xo, t = s["x"], s["xo"], s["t"]

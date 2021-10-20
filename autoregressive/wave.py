@@ -22,6 +22,7 @@ class WaveNetLayer(torch.nn.Module):
     ):
         super().__init__()
         self.dilation = dilation
+        self.residual_channels = residual_channels
         self.conv_dilation = torch.nn.Conv1d(
             residual_channels,
             residual_channels,
@@ -51,6 +52,33 @@ class WaveNetLayer(torch.nn.Module):
 
     def forward(self, x):
         x_dilated = self.conv_dilation(causal_pad(x, 2, self.dilation))
+        return self._forward_dilated(x_dilated)
+
+    def forward_fast(self, x):
+        """Fast wave layer forward.
+
+        This function assumes that x is composed of the last 'recurrent'
+        input, that is `dilation` steps back and the current input.
+
+        Params
+        ------
+        x: (B,C,2) tensor
+            Combination of last recurrent state and current input.
+
+        Returns
+        -------
+        y: (B,C,1) tensor
+            Result of gated-dilated convolution
+        """
+        x_dilated = F.conv1d(
+            x,
+            self.conv_dilation.weight,
+            self.conv_dilation.bias,
+            dilation=1,
+        )
+        return self._forward_dilated(x_dilated)
+
+    def _forward_dilated(self, x_dilated):
         x_filter = torch.tanh(self.conv_tanh(x_dilated))
         x_gate = torch.sigmoid(self.conv_sig(x_dilated))
         x_h = x_gate * x_filter
@@ -93,6 +121,39 @@ class WaveNetBackbone(torch.nn.Module):
             skip_aggregate = skip_aggregate + skip
         return skip_aggregate
 
+    def forward_fast(self, x, queues):
+        x = self.conv_input(x)
+        skip_aggregate = 0.0
+        out_queues = []
+        for layer, q in zip(self.layers, queues):
+            layer: WaveNetLayer
+            h, qout = self._pop_push_queue(q, x)
+            out_queues.append(qout)
+            c = torch.cat((h, x), -1)
+            x, skip = layer.forward_fast(c)
+            skip_aggregate = skip_aggregate + skip
+        return skip_aggregate, out_queues
+
+    def _pop_push_queue(self, q, x):
+        h = q[..., -1:]  # pop last
+        qout = q.roll(1, -1)  # move last to front
+        qout[..., 0:1] = x  # push front
+        return h, qout
+
+    def create_fast_queues(self, device: torch.device):
+        queues = []
+        for layer in self.layers:
+            layer: WaveNetLayer
+            q = torch.zeros(
+                (1, layer.residual_channels, layer.dilation),
+                dtype=layer.conv_dilation.weight.dtype,
+                device=device,
+            )
+            queues.append(q)
+        return queues
+
+        # a = torch.cat((torch.narrow(a, -1, 1, a.shape[-1]-1), torch.rand(2,3,1)),-1);
+
 
 class WaveNetLinear(torch.nn.Module):
     def __init__(
@@ -119,6 +180,13 @@ class WaveNetLinear(torch.nn.Module):
         x = F.gelu(self.conv_mid(x))
         x = self.conv_output(x)
         return x
+
+    def forward_fast(self, x, queues):
+        x, queues = self.features.forward_fast(x, queues)
+        x = F.gelu(x)
+        x = F.gelu(self.conv_mid(x))
+        x = self.conv_output(x)
+        return x, queues
 
     @property
     def receptive_field(self):

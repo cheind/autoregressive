@@ -59,6 +59,12 @@ class RegressionWaveNet(pl.LightningModule):
     def forward(self, x):
         return self.wave(x)
 
+    def forward_fast(self, x, queues):
+        return self.wave.forward_fast(x, queues)
+
+    def create_fast_queues(self, device: torch.device):
+        return self.wave.features.create_fast_queues(device)
+
     def configure_optimizers(self):
         import torch.optim.lr_scheduler as sched
 
@@ -178,6 +184,26 @@ class NaiveGeneration:
         return y[r:]
 
 
+class FastGeneration:
+    def __init__(self, model: RegressionWaveNet) -> None:
+        self.model = model
+        self.model.eval()
+
+    @torch.no_grad()
+    def predict(self, x: torch.Tensor, t: torch.Tensor, horizon: int) -> torch.Tensor:
+        queues = self.model.create_fast_queues(x.device)
+        r = self.model.receptive_field
+        y = x.new_empty(r + horizon)
+        y[:r] = x[-r:]  # Copy last `see` observations
+        for h in range(r):
+            _, queues = self.model.forward_fast(y[h].view(1, 1, 1), queues)
+
+        for h in range(horizon):
+            p, queues = self.model.forward_fast(y[r + h - 1].view(1, 1, 1), queues)
+            y[h + r] = p[0, 0, -1]
+        return y[r:]
+
+
 def train(args):
     logging.basicConfig(level=logging.INFO)
 
@@ -204,8 +230,9 @@ def eval(args):
     # torch.random.manual_seed(123)
     net = RegressionWaveNet.load_from_checkpoint(args.ckpt)
     preds = [
-        (NStepPrediction(net), "n-step prediction"),
-        # (NaiveGeneration(net), "naive n-step generation"),
+        # (NStepPrediction(net), "n-step prediction"),
+        (FastGeneration(net), "fast n-step generation"),
+        (NaiveGeneration(net), "naive n-step generation"),
     ]
 
     _, dataset_val = dataset.create_default_datasets()
@@ -214,7 +241,7 @@ def eval(args):
     grid = ImageGrid(
         fig=fig,
         rect=111,
-        nrows_ncols=(2, 2),
+        nrows_ncols=(4, 4),
         axes_pad=0.05,
         share_all=True,
         label_mode="1",
@@ -223,7 +250,7 @@ def eval(args):
     grid[0].get_xaxis().set_ticks([])
 
     # horizon = net.forecast_steps
-    horizon = 256
+    horizon = 128
 
     for ax, s in zip(grid, dataset_val):
         x, xo, t = s["x"], s["xo"], s["t"]

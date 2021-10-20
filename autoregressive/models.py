@@ -13,6 +13,14 @@ _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
 
 
+def _exp_weights(T, n):
+    """Returns exponential decaying weights for T terms from 1.0 down to n (n>0)"""
+    n = torch.as_tensor(n).float()
+    x = torch.arange(0, T, 1)
+    b = -torch.log(n) / (T - 1)
+    return torch.exp(-x * b)
+
+
 class RegressionWaveNet(pl.LightningModule):
     def __init__(
         self,
@@ -23,6 +31,7 @@ class RegressionWaveNet(pl.LightningModule):
         num_blocks: int = 1,
         num_layers: int = 7,
         loss_require_full_receptive_field: bool = True,
+        loss_exp_decay_weights: bool = False,
     ) -> None:
         super().__init__()
         self.wave = wave.WaveNetLinear(
@@ -37,6 +46,13 @@ class RegressionWaveNet(pl.LightningModule):
         self.loss_require_full_receptive_field = loss_require_full_receptive_field
         self.receptive_field = self.wave.receptive_field
         self.use_positional_encoding = in_channels > 1
+        self.loss_exp_decay_weights = loss_exp_decay_weights
+        if self.loss_exp_decay_weights and self.forecast_steps > 1:
+            self.register_buffer(
+                "l1_weights", _exp_weights(self.forecast_steps, 1e-3).view(1, -1, 1)
+            )
+        else:
+            self.l1_weights = 1.0
         _logger.info(f"Receptive field of model {self.receptive_field}")
         super().save_hyperparameters()
 
@@ -82,8 +98,8 @@ class RegressionWaveNet(pl.LightningModule):
             y_hat = self(x)
         n = y.shape[-1]
         r = self.receptive_field if self.loss_require_full_receptive_field else 0
-        loss = F.l1_loss(y_hat[..., r:n], y[..., r:])
-        return loss
+        losses = F.l1_loss(y_hat[..., r:n], y[..., r:], reduction="none")
+        return torch.mean(losses * self.l1_weights)
 
     def fit(
         self,
@@ -174,6 +190,7 @@ def train(args):
         num_blocks=1,
         num_layers=9,
         loss_require_full_receptive_field=True,
+        loss_exp_decay_weights=True,
     )
     model.fit(dataset_train, dataset_val, batch_size=64)
 
@@ -187,8 +204,8 @@ def eval(args):
     # torch.random.manual_seed(123)
     net = RegressionWaveNet.load_from_checkpoint(args.ckpt)
     preds = [
-        # (NStepPrediction(net), "n-step prediction"),
-        (NaiveGeneration(net), "naive n-step generation"),
+        (NStepPrediction(net), "n-step prediction"),
+        # (NaiveGeneration(net), "naive n-step generation"),
     ]
 
     _, dataset_val = dataset.create_default_datasets()
@@ -205,7 +222,6 @@ def eval(args):
     grid[0].get_yaxis().set_ticks([])
     grid[0].get_xaxis().set_ticks([])
 
-    # horizon = net.forecast_steps
     # horizon = net.forecast_steps
     horizon = 256
 

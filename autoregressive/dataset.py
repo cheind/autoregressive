@@ -157,7 +157,7 @@ def chain_transforms(*args: Sequence[Sample]):
 
 def create_default_datasets():
     dataset_train = FSeriesIterableDataset(
-        num_terms=3,
+        num_terms=(3, 5),
         num_tsamples=1024,
         dt=0.02,
         start_trange=0.0,
@@ -174,7 +174,7 @@ def create_default_datasets():
     # more noisy. Hence, we add noise only once in a while.
 
     dataset_val = FSeriesIterableDataset(
-        num_terms=3,
+        num_terms=(3, 5),
         num_tsamples=1024,
         dt=0.02,
         start_trange=0.0,

@@ -54,9 +54,8 @@ class RegressionWaveNet(pl.LightningModule):
                     opt, mode="min", factor=0.5, patience=1, min_lr=1e-7, threshold=1e-7
                 ),
                 "monitor": "val_loss",
-                "frequency": 1
-                # If "monitor" references validation metrics, then "frequency" should be set to a
-                # multiple of "trainer.check_val_every_n_epoch".
+                "interval": "epoch",
+                "frequency": 1,
             },
         }
 
@@ -86,24 +85,43 @@ class RegressionWaveNet(pl.LightningModule):
         loss = F.l1_loss(y_hat[..., r:n], y[..., r:])
         return loss
 
-    def fit(self, dataset_train, dataset_val, batch_size: int = 64):
+    def fit(
+        self,
+        dataset_train,
+        dataset_val,
+        batch_size: int = 64,
+        max_epochs: int = 30,
+        num_train_curves: int = 2 ** 11,
+        num_val_curves: int = 2 ** 9,
+    ):
         from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
+        from torch.utils.data import IterableDataset
+
+        is_train_iterable = isinstance(dataset_train, torch.utils.data.IterableDataset)
+        is_val_iterable = isinstance(dataset_val, torch.utils.data.IterableDataset)
 
         train_loader = data.DataLoader(dataset_train, batch_size, num_workers=4)
         val_loader = data.DataLoader(dataset_val, batch_size, num_workers=4)
 
         ckpt = ModelCheckpoint(
             monitor="val_loss",
-            filename="regressionwavenet-{step:05d}-{val_loss:.4f}",
+            filename="regressionwavenet-{epoch:02d}-{val_loss:.4f}",
         )
         lrm = LearningRateMonitor(logging_interval="step")
 
-        trainer = pl.Trainer(
-            gpus=1,
-            callbacks=[ckpt, lrm],
-            val_check_interval=2 ** 13 / batch_size,
-            limit_val_batches=2 ** 11 / batch_size,
-        )
+        trainer_args = {
+            "gpus": 1,
+            "callbacks": [ckpt, lrm],
+            "max_epochs": max_epochs,
+        }
+        if is_train_iterable:
+            trainer_args.update(
+                {"limit_train_batches": num_train_curves // batch_size}
+            ),
+        if is_val_iterable:
+            trainer_args.update({"limit_val_batches": num_val_curves // batch_size}),
+
+        trainer = pl.Trainer(**trainer_args)
         trainer.fit(self, train_dataloader=train_loader, val_dataloaders=val_loader)
         _logger.info(f"Best model on validation {ckpt.best_model_path}")
 
@@ -152,7 +170,7 @@ def train(args):
         in_channels=1,
         forecast_steps=1,
         residual_channels=128,
-        skip_channels=64,
+        skip_channels=128,
         num_blocks=1,
         num_layers=9,
         loss_require_full_receptive_field=True,

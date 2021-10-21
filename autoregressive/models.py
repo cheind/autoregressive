@@ -56,14 +56,11 @@ class RegressionWaveNet(pl.LightningModule):
         _logger.info(f"Receptive field of model {self.receptive_field}")
         super().save_hyperparameters()
 
-    def forward(self, x):
-        return self.wave(x)
+    def forward(self, x, return_outputs: bool = False):
+        return self.wave(x, return_outputs=return_outputs)
 
-    def forward_fast(self, x, queues):
-        return self.wave.forward_fast(x, queues)
-
-    def create_fast_queues(self, device: torch.device):
-        return self.wave.features.create_fast_queues(device)
+    def forward_one(self, x, queues):
+        return self.wave.forward_one(x, queues)
 
     def configure_optimizers(self):
         import torch.optim.lr_scheduler as sched
@@ -197,16 +194,29 @@ class FastGeneration:
     def predict(self, x: torch.Tensor, t: torch.Tensor, horizon: int) -> torch.Tensor:
         import time
 
-        t0 = time.time()
-        queues = self.model.create_fast_queues(x.device)
         r = self.model.receptive_field
         y = x.new_empty(r + horizon)
-        y[:r] = x[-r:]  # Copy last `see` observations
-        for h in range(r):
-            _, queues = self.model.forward_fast(y[h].view(1, 1, 1), queues)
+        t0 = time.time()
+        # _, outputs = self.model(x[:r].view(1, 1, -1), return_outputs=True)
+        # queues = wave.create_fast_queues(self.model.wave.features, outputs)
+        # print([q.shape for q in queues])
 
+        y[:r] = x[-r:]  # Copy last `see` observations
+        _, outputs = self.model(y[:r].view(1, 1, -1), return_outputs=True)
+        queues = wave.create_fast_queues(self.model.wave.features, outputs)
+        print(queues[2][0, :10, -1])
+
+        # queues = wave.create_fast_queues(
+        #     self.model.wave.features, outputs=None, device=x.device
+        # )
+        # for h in range(r):
+        #     _, queues = self.model.forward_one(y[h].view(1, 1, 1), queues)
+        # print(queues[2][0, :10, -1])
+
+        # y[:r] = x[-r:]  # Copy last `see` observations
+        y_shaped = y.view(1, 1, -1)
         for h in range(horizon):
-            p, queues = self.model.forward_fast(y[r + h - 1].view(1, 1, 1), queues)
+            p, queues = self.model.forward_one(y_shaped[..., r + h - 1 : r + h], queues)
             y[h + r] = p[0, 0, -1]
         print("fast took", (time.time() - t0))
         return y[r:]
@@ -230,6 +240,7 @@ def train(args):
 
 
 def eval(args):
+    torch.use_deterministic_algorithms(True)
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import ImageGrid
 
@@ -249,7 +260,7 @@ def eval(args):
     grid = ImageGrid(
         fig=fig,
         rect=111,
-        nrows_ncols=(4, 4),
+        nrows_ncols=(1, 1),
         axes_pad=0.05,
         share_all=True,
         label_mode="1",

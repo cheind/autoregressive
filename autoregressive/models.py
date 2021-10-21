@@ -7,7 +7,7 @@ import torch.utils.data as data
 import torch.nn.functional as F
 import torch.optim
 
-from . import dataset, wave
+from . import dataset, wave, lit
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -48,6 +48,7 @@ def fit(
 
     trainer = pl.Trainer(**trainer_args)
     trainer.fit(model, train_dataloader=train_loader, val_dataloaders=val_loader)
+
     _logger.info(f"Best model on validation {ckpt.best_model_path}")
 
 
@@ -157,7 +158,7 @@ def eval(args):
     from .dataset import PI, FSeriesIterableDataset
 
     # torch.random.manual_seed(123)
-    net = wave.LitRegressionWaveNet.load_from_checkpoint(args.ckpt).wavenet
+    net = lit.LitRegressionWaveNet.load_from_checkpoint(args.ckpt).wavenet
     preds = [
         # (NStepPrediction(net), "n-step prediction"),
         (FastGeneration(net), "fast n-step generation"),
@@ -170,7 +171,7 @@ def eval(args):
     grid = ImageGrid(
         fig=fig,
         rect=111,
-        nrows_ncols=(1, 1),
+        nrows_ncols=(8, 8),
         axes_pad=0.05,
         share_all=True,
         label_mode="1",

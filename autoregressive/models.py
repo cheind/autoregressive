@@ -171,7 +171,7 @@ def eval(args):
     grid = ImageGrid(
         fig=fig,
         rect=111,
-        nrows_ncols=(8, 8),
+        nrows_ncols=(4, 4),
         axes_pad=0.05,
         share_all=True,
         label_mode="1",

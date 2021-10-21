@@ -201,6 +201,11 @@ class FastGeneration:
         # queues = wave.create_fast_queues(self.model.wave.features, outputs)
         # print([q.shape for q in queues])
 
+        # Note, if the first item we want to predict x_(t+1),
+        # we usually need input (x_(t-r), x_(t-r+1),...,x_t).
+        # So in fast mode, we the first input will be x_t, hence the
+        # queues need to contain states (x_(t-r), x_(t-r+1),...,x_(t-1))
+
         y[:r] = x[-r:]  # Copy last `see` observations
         _, outputs = self.model(y[: r - 1].view(1, 1, -1), return_outputs=True)
         queues = wave.create_fast_queues(self.model.wave.features, outputs)
@@ -240,7 +245,7 @@ def train(args):
 
 
 def eval(args):
-    torch.use_deterministic_algorithms(True)
+    # torch.use_deterministic_algorithms(True)
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import ImageGrid
 

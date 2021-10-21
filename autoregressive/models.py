@@ -202,7 +202,7 @@ class FastGeneration:
         # print([q.shape for q in queues])
 
         y[:r] = x[-r:]  # Copy last `see` observations
-        _, outputs = self.model(y[:r].view(1, 1, -1), return_outputs=True)
+        _, outputs = self.model(y[: r - 1].view(1, 1, -1), return_outputs=True)
         queues = wave.create_fast_queues(self.model.wave.features, outputs)
         print(queues[2][0, :10, -1])
 

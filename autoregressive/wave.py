@@ -3,6 +3,8 @@ from typing import Callable, Iterator, List, Optional, Protocol
 import torch
 import torch.nn
 import torch.nn.functional as F
+import torch.distributions as D
+import torch.distributions.constraints as constraints
 import torch.nn.init
 
 from .utils import causal_pad
@@ -202,6 +204,23 @@ def regression_sampler(
     model: WaveNet, obs: torch.Tensor, x: torch.Tensor
 ) -> torch.Tensor:
     return x
+
+
+_positive_scale = D.transform_to(constraints.greater_than(0.0))
+
+
+def bimodal_dist(theta: torch.Tensor) -> D.MixtureSameFamily:
+    theta = theta.permute(0, 2, 1)  # (B,6,T) -> (B,T,6)
+    mix = D.Categorical(logits=theta[..., :2])
+    comp = D.Normal(loc=theta[..., 2:4], scale=_positive_scale(theta[..., 4:]))
+    gmm = D.MixtureSameFamily(mix, comp)
+    return gmm
+
+
+def bimodal_sampler(model: WaveNet, obs: torch.Tensor, x: torch.Tensor):
+    gmm = bimodal_dist(x)
+    s = gmm.sample()
+    return s.unsqueeze(1)
 
 
 def generate(

@@ -7,7 +7,7 @@ import torch.utils.data as data
 import torch.nn.functional as F
 import torch.optim
 
-from . import dataset, wave, lit
+from . import dataset, wave, trainer
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -158,7 +158,7 @@ def eval(args):
     from .dataset import PI, FSeriesIterableDataset
 
     # torch.random.manual_seed(123)
-    net = lit.LitRegressionWaveNet.load_from_checkpoint(args.ckpt).wavenet
+    net = trainer.LitRegressionWaveNet.load_from_checkpoint(args.ckpt).wavenet
     preds = [
         # (NStepPrediction(net), "n-step prediction"),
         (FastGeneration(net), "fast n-step generation"),
@@ -221,7 +221,7 @@ def eval2(args):
     from .dataset import PI, FSeriesIterableDataset
 
     # torch.random.manual_seed(123)
-    net = lit.LitRegressionWaveNet.load_from_checkpoint(args.ckpt).wavenet
+    net = trainer.LitRegressionWaveNet.load_from_checkpoint(args.ckpt).wavenet
     net.eval().cuda()
 
     _, dataset_val = dataset.create_default_datasets()
@@ -277,6 +277,63 @@ def eval2(args):
     plt.show()
 
 
+@torch.no_grad()
+def eval3(args):
+    # torch.use_deterministic_algorithms(True)
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.axes_grid1 import ImageGrid
+    import itertools
+
+    # torch.random.manual_seed(123)
+    net = trainer.LitBimodalWaveNet.load_from_checkpoint(args.ckpt).wavenet
+    net.eval().cuda()
+
+    _, dataset_val = dataset.create_default_datasets()
+
+    fig = plt.figure(figsize=(8.0, 8.0))
+    grid = ImageGrid(
+        fig=fig,
+        rect=111,
+        nrows_ncols=(1, 1),
+        axes_pad=0.05,
+        share_all=True,
+        label_mode="1",
+    )
+    grid[0].get_yaxis().set_ticks([])
+    grid[0].get_xaxis().set_ticks([])
+
+    # horizon = net.forecast_steps
+
+    for ax, s in zip(grid, dataset_val):
+        x, xo, t = s["x"], s["xo"], s["t"]
+        dt = t[-1] - t[-2]
+
+        N = 10
+        F = 256
+
+        g = wave.generate_fast(
+            net,
+            x[..., :-1].cuda().view(1, 1, -1).repeat(N, 1, 1),
+            sampler=wave.bimodal_sampler,
+        )
+        xn_fast = torch.cat(list(itertools.islice(g, F)), -1).view(N, -1).cpu()
+
+        tn = torch.arange(0.0, dt * xn_fast.shape[-1], dt) + t[-1]
+
+        ax.plot(t, xo, c="k", linewidth=0.5)
+        for xnf in xn_fast:
+            ax.plot(tn, xnf, alpha=0.7)
+
+        #     ax.plot(t[:see], x[:see], c="k", linewidth=0.5)
+        #     for p, label in preds:
+        #         y = p.predict(x[:see], t[:see], horizon)
+        #         ax.plot(t[see : see + horizon], y, label=label)
+        ax.set_ylim(-4, 4)
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center")
+    plt.show()
+
+
 #  To increase reception field exponentially with linearly increasing number of parameters
 
 
@@ -293,7 +350,7 @@ def main():
     if args.command == "train":
         train(args)
     elif args.command == "eval":
-        eval2(args)
+        eval3(args)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,18 @@
-from typing import Callable, Iterator, List, Optional, Protocol
+from typing import Iterator, List, Optional, Protocol
+import logging
 
+import pytorch_lightning as pl
 import torch
-import torch.nn
-import torch.nn.functional as F
 import torch.distributions as D
 import torch.distributions.constraints as constraints
+import torch.nn
+import torch.nn.functional as F
 import torch.nn.init
 
 from .utils import causal_pad
+
+_logger = logging.getLogger("pytorch_lightning")
+_logger.setLevel(logging.INFO)
 
 FastQueues = List[torch.FloatTensor]
 
@@ -80,7 +85,7 @@ class WaveNetLayer(torch.nn.Module):
         return x_h + x_dilated, skip
 
 
-class WaveNet(torch.nn.Module):
+class WaveNetBase(pl.LightningModule):
     def __init__(
         self,
         in_channels: int = 1,
@@ -116,6 +121,7 @@ class WaveNet(torch.nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.apply(wave_init_weights)
+        _logger.info(f"Receptive field of WaveNet {self.receptive_field}")
 
     def encode(self, x):
         skips = []
@@ -195,15 +201,9 @@ class WaveNet(torch.nn.Module):
 
 class Sampler(Protocol):
     def __call__(
-        self, model: WaveNet, obs: torch.Tensor, x: torch.Tensor
+        self, model: WaveNetBase, obs: torch.Tensor, x: torch.Tensor
     ) -> torch.Tensor:
         ...
-
-
-def regression_sampler(
-    model: WaveNet, obs: torch.Tensor, x: torch.Tensor
-) -> torch.Tensor:
-    return x
 
 
 _positive_scale = D.transform_to(constraints.greater_than(0.0))
@@ -217,14 +217,14 @@ def bimodal_dist(theta: torch.Tensor) -> D.MixtureSameFamily:
     return gmm
 
 
-def bimodal_sampler(model: WaveNet, obs: torch.Tensor, x: torch.Tensor):
+def bimodal_sampler(model: WaveNetBase, obs: torch.Tensor, x: torch.Tensor):
     gmm = bimodal_dist(x)
     s = gmm.sample()
     return s.unsqueeze(1)
 
 
 def generate(
-    model: WaveNet, initial_obs: torch.Tensor, sampler: Sampler
+    model: WaveNetBase, initial_obs: torch.Tensor, sampler: Sampler
 ) -> Iterator[torch.Tensor]:
     B, C, T = initial_obs.shape
     if T < 1:
@@ -249,9 +249,10 @@ def generate(
 
 
 def generate_fast(
-    model: WaveNet, initial_obs: torch.Tensor, sampler: Sampler
+    model: WaveNetBase, initial_obs: torch.Tensor, sampler: Sampler
 ) -> Iterator[torch.Tensor]:
     B, C, T = initial_obs.shape
+    R = model.receptive_field
     if T < 1:
         raise ValueError("Need at least one observation to bootstrap.")
     # prepare queues

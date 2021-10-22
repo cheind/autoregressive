@@ -32,144 +32,65 @@ class FSeriesDataModule(pl.LightningDataModule):
         )
 
 
-class LitRegressionWaveNet(pl.LightningModule):
-    def __init__(
-        self,
-        in_channels: int = 1,
-        forecast_steps: int = 1,
-        residual_channels: int = 64,
-        skip_channels: int = 64,
-        num_blocks: int = 1,
-        num_layers_per_block: int = 9,
-        train_full_receptive_field: bool = True,
-        train_exp_decay: bool = False,
-    ) -> None:
-        super().__init__()
-        self.wavenet = wave.WaveNet(
-            in_channels=in_channels,
-            out_channels=forecast_steps,
-            residual_channels=residual_channels,
-            skip_channels=skip_channels,
-            num_blocks=num_blocks,
-            num_layers_per_block=num_layers_per_block,
-        )
-        self.train_full_receptive_field = train_full_receptive_field
-        self.receptive_field = self.wavenet.receptive_field
-        self.train_exp_decay = train_exp_decay
-        if self.train_exp_decay and forecast_steps > 1:
-            self.register_buffer(
-                "l1_weights", self._exp_weights(forecast_steps, 1e-3).view(1, -1, 1)
-            )
-        else:
-            self.l1_weights = 1.0
-        self.default_sampler = wave.regression_sampler
-        _logger.info(f"Receptive field of model {self.wavenet.receptive_field}")
-        super().save_hyperparameters()
+# class LitBimodalWaveNet(pl.LightningModule):
+#     def __init__(
+#         self,
+#         in_channels: int = 1,
+#         residual_channels: int = 64,
+#         skip_channels: int = 64,
+#         num_blocks: int = 1,
+#         num_layers_per_block: int = 9,
+#         train_full_receptive_field: bool = True,
+#     ) -> None:
+#         super().__init__()
+#         self.wavenet = wave.WaveNet(
+#             in_channels=in_channels,
+#             out_channels=(2 + 2 + 2),
+#             residual_channels=residual_channels,
+#             skip_channels=skip_channels,
+#             num_blocks=num_blocks,
+#             num_layers_per_block=num_layers_per_block,
+#         )
+#         self.train_full_receptive_field = train_full_receptive_field
+#         self.receptive_field = self.wavenet.receptive_field
+#         self.default_sampler = wave.bimodal_sampler
+#         self.positive_scale = D.transform_to(constraints.greater_than(0.0))
+#         _logger.info(f"Receptive field of model {self.wavenet.receptive_field}")
+#         super().save_hyperparameters()
 
-    def configure_optimizers(self):
-        import torch.optim.lr_scheduler as sched
+#     def configure_optimizers(self):
+#         import torch.optim.lr_scheduler as sched
 
-        opt = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return {
-            "optimizer": opt,
-            "lr_scheduler": {
-                "scheduler": sched.ReduceLROnPlateau(
-                    opt, mode="min", factor=0.5, patience=1, min_lr=1e-7, threshold=1e-7
-                ),
-                "monitor": "val_loss",
-                "interval": "epoch",
-                "frequency": 1,
-            },
-        }
+#         opt = torch.optim.Adam(self.parameters(), lr=1e-4)
+#         return {
+#             "optimizer": opt,
+#             "lr_scheduler": {
+#                 "scheduler": sched.ReduceLROnPlateau(
+#                     opt, mode="min", factor=0.5, patience=1, min_lr=1e-7, threshold=1e-7
+#                 ),
+#                 "monitor": "val_loss",
+#                 "interval": "epoch",
+#                 "frequency": 1,
+#             },
+#         }
 
-    def training_step(self, batch, batch_idx):
-        loss = self._step(batch, batch_idx)
-        self.log("train_loss", loss)
-        return loss
+#     def training_step(self, batch, batch_idx):
+#         loss = self._step(batch, batch_idx)
+#         self.log("train_loss", loss)
+#         return loss
 
-    def validation_step(self, batch, batch_idx):
-        loss = self._step(batch, batch_idx)
-        self.log("val_loss", loss, prog_bar=True)
-        return loss
+#     def validation_step(self, batch, batch_idx):
+#         loss = self._step(batch, batch_idx)
+#         self.log("val_loss", loss, prog_bar=True)
+#         return loss
 
-    def _step(self, batch, batch_idx) -> torch.FloatTensor:
-        del batch_idx
-        x = batch["x"][..., :-1].unsqueeze(1)
-        y = batch["xo"][..., 1:]
-        y = y.unfold(-1, self.wavenet.out_channels, 1).permute(0, 2, 1)
-        n = y.shape[-1]
-        yhat = self.wavenet(x)
-        r = self.receptive_field if self.train_full_receptive_field else 0
-        losses = F.l1_loss(yhat[..., r:n], y[..., r:], reduction="none")
-        return torch.mean(losses * self.l1_weights)
-
-    def _exp_weights(self, T, n):
-        """Returns exponential decaying weights for T terms from 1.0 down to n (n>0)"""
-        n = torch.as_tensor(n).float()
-        x = torch.arange(0, T, 1)
-        b = -torch.log(n) / (T - 1)
-        return torch.exp(-x * b)
-
-
-class LitBimodalWaveNet(pl.LightningModule):
-    def __init__(
-        self,
-        in_channels: int = 1,
-        residual_channels: int = 64,
-        skip_channels: int = 64,
-        num_blocks: int = 1,
-        num_layers_per_block: int = 9,
-        train_full_receptive_field: bool = True,
-    ) -> None:
-        super().__init__()
-        self.wavenet = wave.WaveNet(
-            in_channels=in_channels,
-            out_channels=(2 + 2 + 2),
-            residual_channels=residual_channels,
-            skip_channels=skip_channels,
-            num_blocks=num_blocks,
-            num_layers_per_block=num_layers_per_block,
-        )
-        self.train_full_receptive_field = train_full_receptive_field
-        self.receptive_field = self.wavenet.receptive_field
-        self.default_sampler = wave.bimodal_sampler
-        self.positive_scale = D.transform_to(constraints.greater_than(0.0))
-        _logger.info(f"Receptive field of model {self.wavenet.receptive_field}")
-        super().save_hyperparameters()
-
-    def configure_optimizers(self):
-        import torch.optim.lr_scheduler as sched
-
-        opt = torch.optim.Adam(self.parameters(), lr=1e-4)
-        return {
-            "optimizer": opt,
-            "lr_scheduler": {
-                "scheduler": sched.ReduceLROnPlateau(
-                    opt, mode="min", factor=0.5, patience=1, min_lr=1e-7, threshold=1e-7
-                ),
-                "monitor": "val_loss",
-                "interval": "epoch",
-                "frequency": 1,
-            },
-        }
-
-    def training_step(self, batch, batch_idx):
-        loss = self._step(batch, batch_idx)
-        self.log("train_loss", loss)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        loss = self._step(batch, batch_idx)
-        self.log("val_loss", loss, prog_bar=True)
-        return loss
-
-    def _step(self, batch, batch_idx) -> torch.FloatTensor:
-        del batch_idx
-        x = batch["x"][..., :-1].unsqueeze(1)  # (B,1,T)
-        y = batch["xo"][..., 1:]  # (B,T)
-        theta = self.wavenet(x)
-        gmm = wave.bimodal_dist(theta)
-        return -gmm.log_prob(y).mean()  # neg-log-likelihood
+#     def _step(self, batch, batch_idx) -> torch.FloatTensor:
+#         del batch_idx
+#         x = batch["x"][..., :-1].unsqueeze(1)  # (B,1,T)
+#         y = batch["xo"][..., 1:]  # (B,T)
+#         theta = self.wavenet(x)
+#         gmm = wave.bimodal_dist(theta)
+#         return -gmm.log_prob(y).mean()  # neg-log-likelihood
 
 
 def cli_main():
@@ -179,7 +100,7 @@ def cli_main():
         def after_fit(self):
             ckpt = [c for c in self.trainer.callbacks if isinstance(c, ModelCheckpoint)]
             if len(ckpt) > 0:
-                _logger.info(f"Best val model path: {ckpt[0].best_model_path}")
+                _logger.info(f"Best val. model path: {ckpt[0].best_model_path}")
             return super().after_fit()
 
     ckpt = ModelCheckpoint(
@@ -190,8 +111,8 @@ def cli_main():
 
     num_train_curves: int = 2 ** 12
     num_val_curves: int = 2 ** 9
-    cli = MyLightningCLI(
-        pl.LightningModule,
+    _ = MyLightningCLI(
+        wave.WaveNetBase,
         FSeriesDataModule,
         subclass_mode_model=True,
         # seed_everything_default=1234,

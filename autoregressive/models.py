@@ -248,17 +248,25 @@ def eval2(args):
 
         g = wave.generate_fast(
             net,
-            x.cuda().view(1, 1, -1).repeat(N, 1, 1),
+            x[..., :-1].cuda().view(1, 1, -1).repeat(N, 1, 1),
             sampler=wave.regression_sampler,
         )
-        xn = torch.cat(list(itertools.islice(g, 1024)), -1).view(N, -1).cpu()
-        tn = torch.arange(dt, dt * (xn.shape[-1] + 1), dt) + t[-1]
+        xn_fast = torch.cat(list(itertools.islice(g, 256)), -1).view(N, -1).cpu()
 
-        print(xn.shape, tn.shape)
+        g = wave.generate(
+            net,
+            x[..., :-1].cuda().view(1, 1, -1).repeat(N, 1, 1),
+            sampler=wave.regression_sampler,
+        )
+        xn_slow = torch.cat(list(itertools.islice(g, 256)), -1).view(N, -1).cpu()
+
+        tn = torch.arange(0.0, dt * xn_fast.shape[-1], dt) + t[-1]
 
         ax.plot(t, xo, c="k", linewidth=0.5)
-        for xni in xn:
-            ax.plot(tn, xni)
+        for xnf, xns in zip(xn_fast, xn_slow):
+            ax.plot(tn, xnf, alpha=0.7)
+            ax.plot(tn, xns, alpha=0.7)
+
         #     ax.plot(t[:see], x[:see], c="k", linewidth=0.5)
         #     for p, label in preds:
         #         y = p.predict(x[:see], t[:see], horizon)

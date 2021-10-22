@@ -204,6 +204,31 @@ def regression_sampler(
     return x
 
 
+def generate(
+    model: WaveNet, initial_obs: torch.Tensor, sampler: Sampler
+) -> Iterator[torch.Tensor]:
+    B, C, T = initial_obs.shape
+    if T < 1:
+        raise ValueError("Need at least one observation to bootstrap.")
+
+    # We need to track up to the last n samples,
+    # where n equals the receptive field of the model
+    R = model.receptive_field
+    history = initial_obs.new_empty((B, C, R))
+    t = min(R, T)
+    history[..., :t] = initial_obs[..., -t:]
+
+    while True:
+        obs = history[..., :t]
+        x = model.forward(obs)
+        s = sampler(model, obs, x[..., -1:])  # yield sample for t+1 only
+        yield s
+        roll = int(t == R)
+        history = history.roll(-roll, -1)  # no-op as long as history is not full
+        t = min(t + 1, R)
+        history[..., t - 1 : t] = s
+
+
 def generate_fast(
     model: WaveNet, initial_obs: torch.Tensor, sampler: Sampler
 ) -> Iterator[torch.Tensor]:

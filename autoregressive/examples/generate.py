@@ -1,5 +1,7 @@
 import itertools
+from typing import Tuple
 import time
+import math
 
 import torch
 import matplotlib.pyplot as plt
@@ -8,6 +10,10 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from .. import dataset, variants, wave
 
 MODEL_CLASSES = {"RegressionWaveNet": variants.RegressionWaveNet}
+
+
+def geometry(arg: str) -> Tuple[int, int]:
+    return tuple(map(int, arg.split("x")))
 
 
 @torch.no_grad()
@@ -23,7 +29,7 @@ def main():
     )
     parser.add_argument("-num-traj", type=int, default=1)
     parser.add_argument("-num-steps", type=int, default=256)
-    parser.add_argument("-num-curves", type=int, default=4)
+    parser.add_argument("-curves", type=geometry, default=(4, 1), metavar="ROWSxCOLS")
     parser.add_argument(
         "--fast-wavenet", action=argparse.BooleanOptionalAction, default=True
     )
@@ -35,6 +41,7 @@ def main():
     model = MODEL_CLASSES[args.variant].load_from_checkpoint(args.ckpt)
     model = model.eval().to(dev)
     sampler = model.create_sampler()
+    num_curves = args.curves[0] * args.curves[1]
 
     _, dataset_val = dataset.create_default_datasets()
 
@@ -42,7 +49,7 @@ def main():
     grid = ImageGrid(
         fig=fig,
         rect=111,
-        nrows_ncols=(args.num_curves, 1),
+        nrows_ncols=args.curves,
         axes_pad=0.05,
         share_all=True,
         label_mode="1",
@@ -51,7 +58,7 @@ def main():
     grid[0].get_xaxis().set_ticks([])
 
     # Get samples from dataset. These are n-dicts
-    curves = list(itertools.islice(dataset_val, args.num_curves))
+    curves = list(itertools.islice(dataset_val, num_curves))
 
     # Prepare observations. We batch all observations and then repeat
     # these observations for the number of trajectories
@@ -84,14 +91,14 @@ def main():
         tn = torch.arange(0.0, dt * args.num_steps, dt) + t[-1]
 
         ax.plot(t, xo, c="k", linewidth=0.5, label="input")
-        for tidx, xn in enumerate(trajs[idx :: args.num_curves]):
+        for tidx, xn in enumerate(trajs[idx::num_curves]):
             # Note, above we step with num_curves to get all trajectories
             # for this axis. Related to repeat statement above.
             ax.plot(tn, xn, label="generated" if tidx == 0 else "")
         ax.set_ylim(-3, 3)
 
     handles, labels = ax.get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center")
+    fig.legend(handles, labels, loc="lower right")
     fig.suptitle(f"Sample generation by {args.variant}")
     fig.savefig(f"tmp/generate_{args.variant}.pdf")
     plt.show()

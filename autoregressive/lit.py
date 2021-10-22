@@ -12,14 +12,6 @@ _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
 
 
-def _exp_weights(T, n):
-    """Returns exponential decaying weights for T terms from 1.0 down to n (n>0)"""
-    n = torch.as_tensor(n).float()
-    x = torch.arange(0, T, 1)
-    b = -torch.log(n) / (T - 1)
-    return torch.exp(-x * b)
-
-
 class FSeriesDataModule(pl.LightningDataModule):
     def __init__(self, batch_size: int = 64):
         super().__init__()
@@ -36,12 +28,6 @@ class FSeriesDataModule(pl.LightningDataModule):
             self.fseries_val, batch_size=self.batch_size, num_workers=4
         )
 
-    # def test_dataloader(self):
-    #     return data.DataLoader(self.mnist_test, batch_size=self.batch_size)
-
-    # def predict_dataloader(self):
-    #     return data.DataLoader(self.mnist_test, batch_size=self.batch_size)
-
 
 class LitRegressionWaveNet(pl.LightningModule):
     def __init__(
@@ -56,9 +42,9 @@ class LitRegressionWaveNet(pl.LightningModule):
         train_exp_decay: bool = False,
     ) -> None:
         super().__init__()
-        self.wavenet = wave.RegressionWaveNet(
+        self.wavenet = wave.WaveNet(
             in_channels=in_channels,
-            forecast_steps=forecast_steps,
+            out_channels=forecast_steps,
             residual_channels=residual_channels,
             skip_channels=skip_channels,
             num_blocks=num_blocks,
@@ -69,7 +55,7 @@ class LitRegressionWaveNet(pl.LightningModule):
         self.train_exp_decay = train_exp_decay
         if self.train_exp_decay and forecast_steps > 1:
             self.register_buffer(
-                "l1_weights", _exp_weights(forecast_steps, 1e-3).view(1, -1, 1)
+                "l1_weights", self._exp_weights(forecast_steps, 1e-3).view(1, -1, 1)
             )
         else:
             self.l1_weights = 1.0
@@ -106,12 +92,19 @@ class LitRegressionWaveNet(pl.LightningModule):
         del batch_idx
         x = batch["x"][..., :-1].unsqueeze(1)
         y = batch["xo"][..., 1:]
-        y = y.unfold(-1, self.wavenet.forecast_steps, 1).permute(0, 2, 1)
+        y = y.unfold(-1, self.wavenet.out_channels, 1).permute(0, 2, 1)
         n = y.shape[-1]
         yhat = self.wavenet(x)
         r = self.receptive_field if self.train_full_receptive_field else 0
         losses = F.l1_loss(yhat[..., r:n], y[..., r:], reduction="none")
         return torch.mean(losses * self.l1_weights)
+
+    def _exp_weights(self, T, n):
+        """Returns exponential decaying weights for T terms from 1.0 down to n (n>0)"""
+        n = torch.as_tensor(n).float()
+        x = torch.arange(0, T, 1)
+        b = -torch.log(n) / (T - 1)
+        return torch.exp(-x * b)
 
 
 # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/pl_examples/basic_examples/autoencoder.py

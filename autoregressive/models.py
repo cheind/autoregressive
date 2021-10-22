@@ -93,7 +93,7 @@ def fit(
 
 
 class FastGeneration:
-    def __init__(self, model: wave.RegressionWaveNet) -> None:
+    def __init__(self, model: wave.WaveNet) -> None:
         self.model = model
         self.model.eval()
 
@@ -115,7 +115,7 @@ class FastGeneration:
 
         y[:r] = x[-r:]  # Copy last `see` observations
         _, layer_inputs, _ = self.model.encode(y[: r - 1].view(1, 1, -1))
-        queues = self.model.create_fast_queues(layer_inputs)
+        queues = self.model.create_initialized_queues(layer_inputs)
 
         # queues = wave.create_fast_queues(
         #     self.model.wave.features, outputs=None, device=x.device
@@ -201,6 +201,74 @@ def eval(args):
     plt.show()
 
 
+import torch.distributions as D
+
+
+def custom_sampler(
+    model: wave.WaveNet, obs: torch.Tensor, x: torch.Tensor
+) -> torch.Tensor:
+    y = D.Normal(loc=x, scale=1e-4).sample()
+    return y
+
+
+@torch.no_grad()
+def eval2(args):
+    # torch.use_deterministic_algorithms(True)
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.axes_grid1 import ImageGrid
+    import itertools
+
+    from .dataset import PI, FSeriesIterableDataset
+
+    # torch.random.manual_seed(123)
+    net = lit.LitRegressionWaveNet.load_from_checkpoint(args.ckpt).wavenet
+    net.eval().cuda()
+
+    _, dataset_val = dataset.create_default_datasets()
+
+    fig = plt.figure(figsize=(8.0, 8.0))
+    grid = ImageGrid(
+        fig=fig,
+        rect=111,
+        nrows_ncols=(1, 1),
+        axes_pad=0.05,
+        share_all=True,
+        label_mode="1",
+    )
+    grid[0].get_yaxis().set_ticks([])
+    grid[0].get_xaxis().set_ticks([])
+
+    # horizon = net.forecast_steps
+
+    for ax, s in zip(grid, dataset_val):
+        x, xo, t = s["x"], s["xo"], s["t"]
+        dt = t[-1] - t[-2]
+
+        N = 1
+
+        g = wave.generate_fast(
+            net,
+            x.cuda().view(1, 1, -1).repeat(N, 1, 1),
+            sampler=wave.regression_sampler,
+        )
+        xn = torch.cat(list(itertools.islice(g, 1024)), -1).view(N, -1).cpu()
+        tn = torch.arange(dt, dt * (xn.shape[-1] + 1), dt) + t[-1]
+
+        print(xn.shape, tn.shape)
+
+        ax.plot(t, xo, c="k", linewidth=0.5)
+        for xni in xn:
+            ax.plot(tn, xni)
+        #     ax.plot(t[:see], x[:see], c="k", linewidth=0.5)
+        #     for p, label in preds:
+        #         y = p.predict(x[:see], t[:see], horizon)
+        #         ax.plot(t[see : see + horizon], y, label=label)
+        ax.set_ylim(-2, 2)
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center")
+    plt.show()
+
+
 #  To increase reception field exponentially with linearly increasing number of parameters
 
 
@@ -217,7 +285,7 @@ def main():
     if args.command == "train":
         train(args)
     elif args.command == "eval":
-        eval(args)
+        eval2(args)
 
 
 if __name__ == "__main__":

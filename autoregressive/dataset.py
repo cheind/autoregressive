@@ -10,22 +10,23 @@ from .fseries import PI, fseries_amp_phase
 Sample = Dict[str, Any]
 
 
-class FSeriesIterableDataset(torch.utils.data.IterableDataset):
+class FSeriesDataset(torch.utils.data.Dataset):
     """A randomized Fourier series dataset."""
 
     def __init__(
         self,
-        num_terms: Union[int, Tuple[int, int]] = 3,
+        num_curves: int = 2 ** 10,
+        num_fterms: Union[int, Tuple[int, int]] = 3,
         num_tsamples: int = 500,
         dt: float = 0.02,
-        start_trange: Union[float, Tuple[float, float]] = 0.0,
+        tstart_range: Union[float, Tuple[float, float]] = 0.0,
         period_range: Union[float, Tuple[float, float]] = 10.0,
         bias_range: Union[float, Tuple[float, float]] = 0.0,
         coeff_range: Union[float, Tuple[float, float]] = (-1.0, 1.0),
         phase_range: Union[float, Tuple[float, float]] = (-PI, PI),
         smoothness: float = 0.0,
-        seed: int = None,
         transform: Callable[[Sample], Sample] = None,
+        rng: torch.Generator = None,
         include_params: bool = False,
     ) -> None:
         super().__init__()
@@ -36,42 +37,37 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
                 arg = (arg, arg + delta)
             return arg
 
-        self.num_terms = _make_range(num_terms, 1)
+        self.num_curves = num_curves
+        self.num_fterms = _make_range(num_fterms, 1)
         self.period_range = _make_range(period_range, eps)
         self.bias_range = _make_range(bias_range, eps)
         self.coeff_range = _make_range(coeff_range, eps)
         self.phase_range = _make_range(phase_range, eps)
-        self.start_trange = _make_range(start_trange, eps)
+        self.tstart_range = _make_range(tstart_range, eps)
         self.num_tsamples = num_tsamples
-        self.seed = seed
         self.dt = dt
         self.smoothness = smoothness
         self.transform = transform
         self.include_params = include_params
-        self.rng = None
+        if rng is None:
+            rng = torch.default_generator
+        self.curve_params = [self._sample_params(rng) for _ in range(num_curves)]
 
-    def __iter__(self) -> Iterator[Sample]:
-        """Returns an iterator over curve samples."""
-        seed = self.seed
-        if self.rng is None:
-            if seed is None:
-                seed = torch.random.seed()
-            self.rng = torch.Generator()
-            self.rng.manual_seed(seed)
+    def __len__(self):
+        return self.num_curves
 
-        while True:
-            p = self._sample_params(self.rng)
-            t = torch.arange(p["tstart"], self.dt * self.num_tsamples, self.dt)
-            n = torch.arange(p["terms"]) + 1
-            x = fseries_amp_phase(
-                p["bias"], n, p["coeffs"], p["phase"], p["period"], t
-            )[0]
-            sample = {"x": x, "xo": x.clone(), "t": t}
-            if self.include_params:
-                sample["p"] = p
-            if self.transform is not None:
-                sample = self.transform(sample)
-            yield sample
+    def __getitem__(self, index) -> Sample:
+        """Returns a sample curve."""
+        p = self.curve_params[index]
+        t = torch.arange(p["tstart"], self.dt * self.num_tsamples, self.dt)
+        n = torch.arange(p["terms"]) + 1
+        x = fseries_amp_phase(p["bias"], n, p["coeffs"], p["phase"], p["period"], t)[0]
+        sample = {"x": x, "xo": x.clone(), "t": t}
+        if self.include_params:
+            sample["p"] = p
+        if self.transform is not None:
+            sample = self.transform(sample)
+        return sample
 
     def _sample_params(self, g: torch.Generator) -> Dict[str, Any]:
         """Returns sampled fseries parameters."""
@@ -80,7 +76,7 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
             return (r[1] - r[0]) * torch.rand(n, generator=g) + r[0]
 
         terms = torch.randint(
-            self.num_terms[0], self.num_terms[1] + 1, (1,), generator=g
+            self.num_fterms[0], self.num_fterms[1] + 1, (1,), generator=g
         ).item()
         period = uniform(self.period_range, 1)
         bias = uniform(self.bias_range, 1)
@@ -89,7 +85,7 @@ class FSeriesIterableDataset(torch.utils.data.IterableDataset):
             0, -self.smoothness, terms
         )  # decay coefficients for higher order terms. A value of 2 will decay the last term by a factor of 0.01
         phase = uniform(self.phase_range, terms)
-        tstart = uniform(self.start_trange, 1).item()
+        tstart = uniform(self.tstart_range, 1).item()
 
         return {
             "terms": terms,
@@ -155,17 +151,28 @@ def chain_transforms(*args: Sequence[Sample]):
     return transform
 
 
-def create_default_datasets():
-    dataset_train = FSeriesIterableDataset(
-        num_terms=(3, 5),
+def create_default_datasets(
+    num_train_curves: int = 2 ** 12,
+    num_val_curves: int = 2 ** 9,
+    train_seed: int = None,
+    val_seed: int = None,
+):
+    rng = None
+    if train_seed is not None:
+        rng = torch.Generator().manual_seed(train_seed)
+
+    dataset_train = FSeriesDataset(
+        num_curves=num_train_curves,
+        num_fterms=(3, 5),
         num_tsamples=1024,
         dt=0.02,
-        start_trange=0.0,
+        tstart_range=0.0,
         period_range=(3, 15),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
+        rng=rng
         # transform=Noise(scale=1e-4, p=0.25),
     )
     # Note, using fixed noise with probability 1, will teach the model
@@ -173,16 +180,22 @@ def create_default_datasets():
     # noise in evaluation, the models predictions will be significantly
     # more noisy. Hence, we add noise only once in a while.
 
-    dataset_val = FSeriesIterableDataset(
-        num_terms=(3, 5),
+    rng = None
+    if val_seed is not None:
+        rng = torch.Generator().manual_seed(val_seed)
+
+    dataset_val = FSeriesDataset(
+        num_curves=num_val_curves,
+        num_fterms=(3, 5),
         num_tsamples=1024,
         dt=0.02,
-        start_trange=0.0,
+        tstart_range=0.0,
         period_range=(5.0, 10.0),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
+        rng=rng,
     )
 
     return dataset_train, dataset_val
@@ -192,8 +205,9 @@ def main():
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import ImageGrid
 
-    ds = FSeriesIterableDataset(
-        num_terms=(3, 5),
+    ds = FSeriesDataset(
+        num_curves=2 ** 8,
+        num_fterms=(3, 5),
         num_tsamples=500,
         dt=0.02,
         period_range=(10.0, 12.0),
@@ -203,6 +217,7 @@ def main():
         # include_params=True,
         smoothness=0.75,
         transform=Quantize(0.2, p=1.0),
+        rng=torch.Generator().manual_seed(123),
     )
 
     # dl = torch.utils.data.DataLoader(ds, batch_size=4, num_workers=4)
@@ -215,7 +230,7 @@ def main():
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(fig, 111, nrows_ncols=(4, 4), axes_pad=0.05, share_all=False)
 
-    for ax, s in zip(grid, iter(ds)):
+    for ax, s in zip(grid, ds):
         ax.plot(s["t"], s["x"])
         ax.plot(s["t"], s["xo"])
     plt.show()

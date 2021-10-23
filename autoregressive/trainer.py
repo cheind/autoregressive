@@ -1,13 +1,7 @@
 import logging
 
 import pytorch_lightning as pl
-import torch
-import torch.nn.functional as F
-import torch.distributions as D
-import torch.distributions.constraints as constraints
 import torch.utils.data as data
-
-from pytorch_lightning.utilities.cli import LightningCLI
 
 from . import dataset, wave
 
@@ -16,19 +10,35 @@ _logger.setLevel(logging.INFO)
 
 
 class FSeriesDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size: int = 64):
+    def __init__(
+        self,
+        num_train_curves: int = 2 ** 12,
+        num_val_curves: int = 2 ** 9,
+        num_workers: int = 0,
+        batch_size: int = 64,
+        train_seed: int = None,
+        val_seed: int = None,
+    ):
         super().__init__()
-        self.fseries_train, self.fseries_val = dataset.create_default_datasets()
+        self.fseries_train, self.fseries_val = dataset.create_default_datasets(
+            num_train_curves, num_val_curves, train_seed, val_seed
+        )
         self.batch_size = batch_size
+        self.num_workers = num_workers
 
     def train_dataloader(self):
         return data.DataLoader(
-            self.fseries_train, batch_size=self.batch_size, num_workers=4
+            self.fseries_train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
         return data.DataLoader(
-            self.fseries_val, batch_size=self.batch_size, num_workers=4
+            self.fseries_val,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
         )
 
 
@@ -94,6 +104,7 @@ class FSeriesDataModule(pl.LightningDataModule):
 
 
 def cli_main():
+    from pytorch_lightning.utilities.cli import LightningCLI
     from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
     class MyLightningCLI(LightningCLI):
@@ -109,8 +120,6 @@ def cli_main():
     )
     lrm = LearningRateMonitor(logging_interval="step")
 
-    num_train_curves: int = 2 ** 12
-    num_val_curves: int = 2 ** 9
     _ = MyLightningCLI(
         wave.WaveNetBase,
         FSeriesDataModule,
@@ -122,8 +131,6 @@ def cli_main():
             "callbacks": [ckpt, lrm],
             "max_epochs": 30,
             "gpus": 1,
-            "limit_train_batches": num_train_curves // 64,
-            "limit_val_batches": num_val_curves // 64,
             "log_every_n_steps": 25,
         },
     )

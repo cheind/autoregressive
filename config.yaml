@@ -26,8 +26,8 @@ trainer:
   max_steps: null
   min_steps: null
   max_time: null
-  limit_train_batches: 64
-  limit_val_batches: 8
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
   limit_test_batches: 1.0
   limit_predict_batches: 1.0
   val_check_interval: 1.0
@@ -59,7 +59,12 @@ trainer:
   multiple_trainloader_mode: max_size_cycle
   stochastic_weight_avg: false
 data:
+  num_train_curves: 4096
+  num_val_curves: 512
+  num_workers: 0
   batch_size: 64
+  train_seed: null
+  val_seed: null
 model:
   class_path: autoregressive.variants.RegressionWaveNet
   init_args:

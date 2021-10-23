@@ -71,68 +71,6 @@ def fit(
 #         return y[0, :horizon, -1]
 
 
-# class NaiveGeneration:
-#     def __init__(self, model) -> None:
-#         self.model = model
-#         self.model.eval()
-#         assert not self.model.use_positional_encoding
-
-#     @torch.no_grad()
-#     def predict(self, x: torch.Tensor, t: torch.Tensor, horizon: int) -> torch.Tensor:
-#         import time
-
-#         t0 = time.time()
-#         r = self.model.receptive_field
-#         y = x.new_empty(r + horizon)
-#         y[:r] = x[-r:]  # Copy last `see` observations
-#         for h in range(horizon):
-#             p = self.model(y[h : h + r].view(1, 1, -1))
-#             y[h + r] = p[0, 0, -1]
-#         print("naive took", (time.time() - t0))
-#         return y[r:]
-
-
-class FastGeneration:
-    def __init__(self, model: wave.WaveNet) -> None:
-        self.model = model
-        self.model.eval()
-
-    @torch.no_grad()
-    def predict(self, x: torch.Tensor, t: torch.Tensor, horizon: int) -> torch.Tensor:
-        import time
-
-        r = self.model.receptive_field
-        y = x.new_empty(r + horizon)
-        t0 = time.time()
-        # _, outputs = self.model(x[:r].view(1, 1, -1), return_outputs=True)
-        # queues = wave.create_fast_queues(self.model.wave.features, outputs)
-        # print([q.shape for q in queues])
-
-        # Note, if the first item we want to predict x_(t+1),
-        # we usually need input (x_(t-r), x_(t-r+1),...,x_t).
-        # So in fast mode, we the first input will be x_t, hence the
-        # queues need to contain states (x_(t-r), x_(t-r+1),...,x_(t-1))
-
-        y[:r] = x[-r:]  # Copy last `see` observations
-        _, layer_inputs, _ = self.model.encode(y[: r - 1].view(1, 1, -1))
-        queues = self.model.create_initialized_queues(layer_inputs)
-
-        # queues = wave.create_fast_queues(
-        #     self.model.wave.features, outputs=None, device=x.device
-        # )
-        # for h in range(r):
-        #     _, queues = self.model.forward_one(y[h].view(1, 1, 1), queues)
-        # print(queues[2][0, :10, -1])
-
-        # y[:r] = x[-r:]  # Copy last `see` observations
-        y_shaped = y.view(1, 1, -1)
-        for h in range(horizon):
-            p, queues = self.model.forward_one(y_shaped[..., r + h - 1 : r + h], queues)
-            y[h + r] = p[0, 0, -1]
-        print("fast took", (time.time() - t0))
-        return y[r:]
-
-
 def train(args):
     logging.basicConfig(level=logging.INFO)
 

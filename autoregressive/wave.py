@@ -1,5 +1,6 @@
-from typing import Iterator, List, Optional, Protocol
+import itertools
 import logging
+from typing import Iterator, List, Optional, Protocol, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -15,6 +16,7 @@ _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
 
 FastQueues = List[torch.FloatTensor]
+WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
 
 
 def wave_init_weights(m):
@@ -199,7 +201,7 @@ class WaveNetBase(pl.LightningModule):
         return queues
 
 
-class Sampler(Protocol):
+class ObservationSampler(Protocol):
     def __call__(
         self, model: WaveNetBase, obs: torch.Tensor, x: torch.Tensor
     ) -> torch.Tensor:
@@ -224,8 +226,8 @@ def bimodal_sampler(model: WaveNetBase, obs: torch.Tensor, x: torch.Tensor):
 
 
 def generate(
-    model: WaveNetBase, initial_obs: torch.Tensor, sampler: Sampler
-) -> Iterator[torch.Tensor]:
+    model: WaveNetBase, initial_obs: torch.Tensor, sampler: ObservationSampler
+) -> WaveGenerator:
     B, C, T = initial_obs.shape
     if T < 1:
         raise ValueError("Need at least one observation to bootstrap.")
@@ -241,7 +243,7 @@ def generate(
         obs = history[..., :t]
         x = model.forward(obs)
         s = sampler(model, obs, x[..., -1:])  # yield sample for t+1 only
-        yield s
+        yield s, x
         roll = int(t == R)
         history = history.roll(-roll, -1)  # no-op as long as history is not full
         t = min(t + 1, R)
@@ -249,8 +251,8 @@ def generate(
 
 
 def generate_fast(
-    model: WaveNetBase, initial_obs: torch.Tensor, sampler: Sampler
-) -> Iterator[torch.Tensor]:
+    model: WaveNetBase, initial_obs: torch.Tensor, sampler: ObservationSampler
+) -> WaveGenerator:
     B, C, T = initial_obs.shape
     R = model.receptive_field
     if T < 1:
@@ -270,5 +272,17 @@ def generate_fast(
     while True:
         x, queues = model.forward_one(obs, queues)
         s = sampler(model, obs, x)
-        yield s
+        yield s, x
         obs = s
+
+
+def slice_generator(
+    gen: WaveGenerator,
+    stop: int,
+    step: int = 1,
+    start: int = 0,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Slices the given generator to get upcoming predictions and network outputs."""
+    sl = itertools.islice(gen, start, stop, step)  # List[(sample,output)]
+    samples, outputs = list(zip(*sl))
+    return torch.cat(samples, -1), torch.cat(outputs, -1)

@@ -87,7 +87,8 @@ def main():
         )
 
     t0 = time.time()
-    trajs = torch.cat(list(itertools.islice(g, cfg["num_steps"])), -1).squeeze(1).cpu()
+    trajs, _ = wave.slice_generator(g, stop=cfg["num_steps"])  # (B,1,T)
+    trajs = trajs.squeeze(1).cpu()
     print(f"Generation took {(time.time()-t0):.3f} secs")
 
     # Plot

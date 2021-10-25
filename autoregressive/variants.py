@@ -2,7 +2,7 @@ import logging
 import torch
 import torch.nn.functional as F
 
-from . import wave
+from . import wave, losses
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -55,17 +55,6 @@ class RegressionWaveNet(wave.WaveNetBase):
         }
 
     def training_step(self, batch, batch_idx):
-        loss = self._step(batch, batch_idx)
-        self.log("train_loss", loss)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        loss = self._step(batch, batch_idx)
-        self.log("val_loss", loss, prog_bar=True)
-        return loss
-
-    def _step(self, batch, batch_idx) -> torch.FloatTensor:
-        del batch_idx
         x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
         y: torch.Tensor = batch["xo"][..., 1:]
         y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
@@ -73,7 +62,36 @@ class RegressionWaveNet(wave.WaveNetBase):
         yhat = self(x)
         r = self.receptive_field if self.train_full_receptive_field else 0
         losses = F.l1_loss(yhat[..., r:n], y[..., r:], reduction="none")
-        return torch.mean(losses * self.l1_weights)
+        loss = torch.mean(losses * self.l1_weights)
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        yr, samples, _ = self._step(batch, num_forecast=64, max_sequences=512)
+        loss = F.l1_loss(samples, yr)
+        self.log("val_loss", loss, prog_bar=True)
+        return loss
+
+    def _step(self, batch, num_forecast: int, max_sequences: int) -> torch.FloatTensor:
+        x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
+        y: torch.Tensor = batch["xo"][..., 1:].unsqueeze(1)
+        _, yr, samples, outputs = losses.rolling_nstep(
+            self,
+            self.create_sampler(),
+            x,
+            y,
+            num_forecast=num_forecast,
+            max_sequences=max_sequences,
+            detach_sample=True,
+        )
+        return yr, samples, outputs
+
+        # y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
+        # n = y.shape[-1]
+        # yhat = self(x)
+        # r = self.receptive_field if self.train_full_receptive_field else 0
+        # losses = F.l1_loss(yhat[..., r:n], y[..., r:], reduction="none")
+        # return torch.mean(losses * self.l1_weights)
 
     def _exp_weights(self, T, n):
         """Returns exponential decaying weights for T terms from 1.0 down to n (n>0)"""

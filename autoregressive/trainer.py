@@ -138,6 +138,6 @@ def cli_main():
 
 if __name__ == "__main__":
     cli_main()
-    # python -m autoregressive.trainer --model autoregressive.trainer.LitRegressionWaveNet --print_config > config.yaml
+    # python -m autoregressive.trainer --model autoregressive.variants.RegressionWaveNet --print_config > config.yaml
     # python -m autoregressive.trainer --model autoregressive.trainer.LitBimodalWaveNet --print_config > bimodal.yaml
-    # python -m autoregressive.trainer --config regressive.yaml
+    # python -m autoregressive.trainer --config config.yaml

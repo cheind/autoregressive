@@ -226,7 +226,10 @@ def bimodal_sampler(model: WaveNetBase, obs: torch.Tensor, x: torch.Tensor):
 
 
 def generate(
-    model: WaveNetBase, initial_obs: torch.Tensor, sampler: ObservationSampler
+    model: WaveNetBase,
+    initial_obs: torch.Tensor,
+    sampler: ObservationSampler,
+    detach_sample: bool = True,
 ) -> WaveGenerator:
     B, C, T = initial_obs.shape
     if T < 1:
@@ -243,6 +246,8 @@ def generate(
         obs = history[..., :t]
         x = model.forward(obs)
         s = sampler(model, obs, x[..., -1:])  # yield sample for t+1 only
+        if detach_sample:
+            s = s.detach()
         yield s, x
         roll = int(t == R)
         history = history.roll(-roll, -1)  # no-op as long as history is not full
@@ -251,7 +256,10 @@ def generate(
 
 
 def generate_fast(
-    model: WaveNetBase, initial_obs: torch.Tensor, sampler: ObservationSampler
+    model: WaveNetBase,
+    initial_obs: torch.Tensor,
+    sampler: ObservationSampler,
+    detach_sample: bool = True,
 ) -> WaveGenerator:
     B, C, T = initial_obs.shape
     R = model.receptive_field
@@ -272,6 +280,8 @@ def generate_fast(
     while True:
         x, queues = model.forward_one(obs, queues)
         s = sampler(model, obs, x)
+        if detach_sample:
+            s = s.detach()
         yield s, x
         obs = s
 
@@ -282,7 +292,7 @@ def slice_generator(
     step: int = 1,
     start: int = 0,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Slices the given generator to get upcoming predictions and network outputs."""
+    """Slices the given generator to get subsequent predictions and network outputs."""
     sl = itertools.islice(gen, start, stop, step)  # List[(sample,output)]
     samples, outputs = list(zip(*sl))
     return torch.cat(samples, -1), torch.cat(outputs, -1)

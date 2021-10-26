@@ -23,7 +23,8 @@ def wave_init_weights(m):
     """Initialize conv1d with Xavier_uniform weight and 0 bias."""
     if isinstance(m, torch.nn.Conv1d):
         torch.nn.init.xavier_uniform_(m.weight)
-        torch.nn.init.constant_(m.bias, 0.0)
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0.0)
 
 
 class WaveNetLayer(torch.nn.Module):

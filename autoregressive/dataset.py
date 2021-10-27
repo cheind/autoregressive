@@ -126,17 +126,44 @@ class Noise(ApplyWithProb):
         return sample
 
 
-class Quantize(ApplyWithProb):
+class Quantize:
     """Quantizes observations to nearest multiple of bin-size"""
 
-    def __init__(self, bin_size: float = 0.05, p: float = 0.5) -> None:
-        super().__init__(p)
+    def __init__(self, bin_size: float = 0.05, num_bins: int = None) -> None:
+        if num_bins is not None:
+            bin_size = 1 / (num_bins - 1)
         self.bin_size = bin_size
 
-    def _apply(self, sample: Sample) -> Sample:
+    def __call__(self, sample: Sample) -> Sample:
         x = sample["x"]
-        sample["x"] = torch.round(x / self.bin_size) * self.bin_size
+        b = torch.round(x / self.bin_size)
+        sample["x"] = b * self.bin_size
+        sample["b"] = b.long()
         return sample
+
+
+class Normalize:
+    """Normalize to [0,1] range on a per-sample basis"""
+
+    def __call__(self, sample: Sample) -> Sample:
+        sample["x"] = self.apply(sample["x"])
+        return sample
+
+    def apply(self, x: torch.Tensor):
+        cmin, cmax = x.min(), x.max()
+        return (x - cmin) / (cmax - cmin)
+
+    @staticmethod
+    def find_range(*ds: FSeriesDataset) -> Tuple[float, float]:
+        dl = torch.utils.data.DataLoader(
+            torch.utils.data.ConcatDataset(ds), batch_size=256, num_workers=4
+        )
+        fmax = torch.finfo(torch.float32).max
+        lower, upper = fmax, -fmax
+        for b in dl:
+            lower = min(lower, b["x"].min())
+            upper = max(upper, b["x"].max())
+        return lower, upper
 
 
 def chain_transforms(*args: Sequence[Sample]):
@@ -152,14 +179,19 @@ def chain_transforms(*args: Sequence[Sample]):
 
 
 def create_default_datasets(
-    num_train_curves: int = 2 ** 12,
+    num_train_curves: int = 2 ** 13,
     num_val_curves: int = 2 ** 9,
     train_seed: int = None,
     val_seed: int = None,
+    num_bins: int = None,
 ):
     rng = None
     if train_seed is not None:
         rng = torch.Generator().manual_seed(train_seed)
+
+    transform = None
+    if num_bins is not None:
+        transform = chain_transforms(Normalize(), Quantize(num_bins=num_bins))
 
     dataset_train = FSeriesDataset(
         num_curves=num_train_curves,
@@ -167,13 +199,13 @@ def create_default_datasets(
         num_tsamples=1024,
         dt=0.02,
         tstart_range=0.0,
-        period_range=(3, 15),
+        period_range=10.0,
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
-        rng=rng
-        # transform=Noise(scale=1e-4, p=0.25),
+        rng=rng,
+        transform=transform,
     )
     # Note, using fixed noise with probability 1, will teach the model
     # to always account for that noise level. When you then turn off the
@@ -190,12 +222,13 @@ def create_default_datasets(
         num_tsamples=1024,
         dt=0.02,
         tstart_range=0.0,
-        period_range=(5.0, 10.0),
+        period_range=10.0,
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
         smoothness=0.75,
         rng=rng,
+        transform=transform,
     )
 
     return dataset_train, dataset_val
@@ -216,9 +249,11 @@ def main():
         phase_range=(-PI, PI),
         # include_params=True,
         smoothness=0.75,
-        transform=Quantize(0.2, p=1.0),
+        transform=chain_transforms(Normalize(), Quantize(num_bins=32)),
         rng=torch.Generator().manual_seed(123),
     )
+
+    # print(Normalize.find_range(*create_default_datasets()))
 
     # dl = torch.utils.data.DataLoader(ds, batch_size=4, num_workers=4)
     # data = next(iter(dl))
@@ -228,9 +263,10 @@ def main():
     # print(data["x"][..., :10])
 
     fig = plt.figure(figsize=(8.0, 8.0))
-    grid = ImageGrid(fig, 111, nrows_ncols=(4, 4), axes_pad=0.05, share_all=False)
+    grid = ImageGrid(fig, 111, nrows_ncols=(2, 1), axes_pad=0.05, share_all=False)
 
     for ax, s in zip(grid, ds):
+        # ax.step(s["t"], s["x"])
         ax.plot(s["t"], s["x"])
         ax.plot(s["t"], s["xo"])
     plt.show()

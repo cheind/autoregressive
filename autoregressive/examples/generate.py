@@ -49,7 +49,8 @@ def main():
     curve_layout = geometry(cfg["curves"])
     num_curves = curve_layout[0] * curve_layout[1]
 
-    _, dataset_val = dataset.create_default_datasets()
+    dm = cli.datamodule
+    dataset_val = dm.fseries_train
 
     fig = plt.figure()
     grid = ImageGrid(
@@ -93,7 +94,8 @@ def main():
 
     # Plot
     for idx, (ax, s) in enumerate(zip(grid, curves)):
-        xo, t = s["xo"], s["t"]
+        xo, t = s["x"], s["t"]
+        print(s["b"])
         dt = t[-1] - t[-2]
         tn = torch.arange(0.0, dt * cfg["num_steps"], dt) + t[-1]
 

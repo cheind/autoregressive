@@ -12,16 +12,17 @@ _logger.setLevel(logging.INFO)
 class FSeriesDataModule(pl.LightningDataModule):
     def __init__(
         self,
-        num_train_curves: int = 2 ** 12,
+        num_train_curves: int = 2 ** 13,
         num_val_curves: int = 2 ** 9,
         num_workers: int = 0,
         batch_size: int = 64,
         train_seed: int = None,
         val_seed: int = None,
+        num_bins: int = None,
     ):
         super().__init__()
         self.fseries_train, self.fseries_val = dataset.create_default_datasets(
-            num_train_curves, num_val_curves, train_seed, val_seed
+            num_train_curves, num_val_curves, train_seed, val_seed, num_bins=num_bins
         )
         self.batch_size = batch_size
         self.num_workers = num_workers

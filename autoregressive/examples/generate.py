@@ -95,7 +95,6 @@ def main():
     # Plot
     for idx, (ax, s) in enumerate(zip(grid, curves)):
         xo, t = s["x"], s["t"]
-        print(s["b"])
         dt = t[-1] - t[-2]
         tn = torch.arange(0.0, dt * cfg["num_steps"], dt) + t[-1]
 

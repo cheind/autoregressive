@@ -68,7 +68,9 @@ class RegressionWaveNet(wave.WaveNetBase):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        yr, samples, _ = self._step(batch, num_forecast=64, max_sequences=512)
+        yr, samples, _ = self._step(
+            batch, num_forecast=64, max_sequences=batch["x"].shape[0]
+        )
         loss = F.l1_loss(samples, yr)
         self.log("val_loss", loss, prog_bar=True)
         return loss

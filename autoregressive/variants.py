@@ -14,8 +14,7 @@ class RegressionWaveNet(wave.WaveNetBase):
         self,
         in_channels: int = 1,
         forecast_steps: int = 1,
-        residual_channels: int = 64,
-        skip_channels: int = 64,
+        wave_channels: int = 64,
         num_blocks: int = 1,
         num_layers_per_block: int = 9,
         train_full_receptive_field: bool = True,
@@ -24,8 +23,7 @@ class RegressionWaveNet(wave.WaveNetBase):
         super().__init__(
             in_channels=in_channels,
             out_channels=forecast_steps,
-            residual_channels=residual_channels,
-            skip_channels=skip_channels,
+            wave_channels=wave_channels,
             num_blocks=num_blocks,
             num_layers_per_block=num_layers_per_block,
         )
@@ -73,7 +71,6 @@ class RegressionWaveNet(wave.WaveNetBase):
         )
         loss = F.l1_loss(samples, yr)
         self.log("val_loss", loss, prog_bar=True)
-        return loss
 
     def _step(self, batch, num_forecast: int, max_sequences: int) -> torch.FloatTensor:
         x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
@@ -119,8 +116,7 @@ class QuantizedWaveNet(wave.WaveNetBase):
     def __init__(
         self,
         in_channels: int = 1,
-        residual_channels: int = 64,
-        skip_channels: int = 64,
+        wave_channels: int = 64,
         num_blocks: int = 1,
         num_layers_per_block: int = 9,
         num_bins: int = 32,
@@ -129,8 +125,7 @@ class QuantizedWaveNet(wave.WaveNetBase):
         super().__init__(
             in_channels=in_channels,
             out_channels=num_bins,
-            residual_channels=residual_channels,
-            skip_channels=skip_channels,
+            wave_channels=wave_channels,
             num_blocks=num_blocks,
             num_layers_per_block=num_layers_per_block,
         )

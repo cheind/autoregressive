@@ -12,8 +12,7 @@ def test_generators():
     net = wave.WaveNetBase(
         in_channels=1,
         out_channels=1,
-        residual_channels=8,
-        skip_channels=8,
+        wave_channels=8,
         num_blocks=1,
         num_layers_per_block=3,
     )

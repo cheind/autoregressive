@@ -22,10 +22,10 @@ def test_generators():
     y = net(x)
     assert y.shape == (1, 1, 16)
 
-    # Next, we compare generators to direct net output y.
-    # We do so, by created an artificial padded input sequences
-    # (length=receptive field) via unfold and instruct the generator
-    # to only generate 1 output. This should then match the content of y.
+    # Next, we compare generators to net output y.
+    # We do so, by created an artificial padded input sequence
+    # (length=receptive field), then unfold into individual 16 curves of length 8 (step=1).
+    # We feed these as input to the generator and compare the 16 outputs that should match y.
 
     xpad = F.pad(x, (7, 0))
     xwnd = xpad.unfold(-1, 8, 1).permute(2, 0, 1, 3).reshape(-1, 1, 8)  # 16,1,8

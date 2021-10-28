@@ -275,7 +275,7 @@ def generate(
         s = sampler(model, obs, x[..., -1:])  # yield sample for t+1 only
         if detach_sample:
             s = s.detach()
-        yield s, x
+        yield s, x[..., -1:]
         roll = int(t == R)
         history = history.roll(-roll, -1)  # no-op as long as history is not full
         t = min(t + 1, R)

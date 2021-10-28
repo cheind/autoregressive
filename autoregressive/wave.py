@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Iterator, List, Optional, Protocol, Tuple
+from typing import Iterator, List, Optional, Protocol, Tuple, Sequence, overload
 
 import pytorch_lightning as pl
 import torch
@@ -25,6 +25,31 @@ def wave_init_weights(m):
         torch.nn.init.xavier_uniform_(m.weight)
         if m.bias is not None:
             torch.nn.init.constant_(m.bias, 0.0)
+
+
+@overload
+def compute_receptive_field(dilation_seq: Sequence[int], kernel_size: int) -> int:
+    ...
+
+
+@overload
+def compute_receptive_field(
+    num_blocks: int, num_layers_per_block: int, kernel_size: int
+) -> int:
+    ...
+
+
+def compute_receptive_field(
+    dilation_seq: Sequence[int] = None,
+    num_blocks: int = None,
+    num_layers_per_block: int = None,
+    kernel_size: int = 2,
+) -> int:
+    if dilation_seq is None:
+        dilation_seq = [
+            2 ** i for _ in range(num_blocks) for i in range(num_layers_per_block)
+        ]
+    return (kernel_size - 1) * sum(dilation_seq) + 1
 
 
 class WaveNetLayer(torch.nn.Module):
@@ -113,10 +138,11 @@ class WaveNetBase(pl.LightningModule):
         )
         self.conv_mid = torch.nn.Conv1d(skip_channels, skip_channels, kernel_size=1)
         self.conv_output = torch.nn.Conv1d(skip_channels, out_channels, kernel_size=1)
-        kernel_size = 2
-        self.receptive_field = (kernel_size - 1) * sum(
-            [2 ** i for _ in range(num_blocks) for i in range(num_layers_per_block)]
-        ) + 1
+        self.receptive_field = compute_receptive_field(
+            num_blocks=num_blocks,
+            num_layers_per_block=num_layers_per_block,
+            kernel_size=2,
+        )
         self.residual_channels = residual_channels
         self.skip_channels = skip_channels
         self.num_blocks = num_blocks

@@ -29,6 +29,9 @@ def test_generators():
 
     xpad = F.pad(x, (7, 0))
     xwnd = xpad.unfold(-1, 8, 1).permute(2, 0, 1, 3).reshape(-1, 1, 8)  # 16,1,8
+    # first sequence will be [0,0,0,0,0,0,0,x[0]] and should match y[0]
+    # second will be         [0,0,0,0,0,0,x[0],x[1]] and should match y[1]
+    # ...
 
     gslow = wave.generate(net, xwnd, sampler=identity_sampler)
     yslow_samples, yslow_outputs = wave.slice_generator(gslow, 1)

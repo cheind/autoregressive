@@ -23,6 +23,7 @@ def rolling_nstep(
     B, C, T = x.shape
     R = model.receptive_field
 
+    # TODO we should not consider the first R inputs/outputs
     x = x[..., : T - num_forecast].unfold(-1, R, 1)  # B,C,W,R
     y = y[..., (R - 1) :].unfold(-1, num_forecast, 1)  # B,C,M,N
     W = min(x.shape[2], y.shape[2])  # sanity - believe its unnecessary though

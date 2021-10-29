@@ -14,7 +14,7 @@ def rolling_nstep(
     skip_partial: bool = True,
     detach_sample: bool = True,
 ):
-    (B, C, T), R = x.shape, model.receptive_field
+    (_, _, T), R = x.shape, model.receptive_field
 
     off = (R - 1) if skip_partial else 0
     roll_idx = torch.arange(off, T - num_generate + 1, 1, device=x.device)
@@ -55,29 +55,3 @@ def rolling_nstep_mae(
         sum_loss = sum_loss + F.l1_loss(yhat, y[..., idx : idx + G], reduction="sum")
         num_pred = num_pred + yhat.numel()
     return sum_loss / num_pred
-
-
-if __name__ == "__main__":
-
-    model = wave.WaveNetBase(1, 1, 8, 1, 3)
-    print(model.receptive_field)
-
-    torch.manual_seed(123)
-    seq = torch.rand(1, 1, 16)
-    x = seq[..., :-1]
-    y = seq[..., 1:]
-
-    print(x)
-    print(model(x))
-    yhat, yout, starts = rolling_nstep(
-        model,
-        lambda model, obs, x: x,
-        x,
-        num_generate=4,
-        detach_sample=True,
-    )
-    print(yhat.shape, yout.shape, starts.shape)
-    print(starts)
-    print(yhat[0, 0, 0])
-    print(yhat[1, 0, 0])
-    print(yhat[2, 0, 0])

@@ -50,7 +50,7 @@ def main():
     num_curves = curve_layout[0] * curve_layout[1]
 
     dm = cli.datamodule
-    dataset_val = dm.fseries_train
+    dataset_val = dm.fseries_val
 
     fig = plt.figure()
     grid = ImageGrid(

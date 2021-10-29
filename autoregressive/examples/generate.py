@@ -8,7 +8,7 @@ import torch
 from mpl_toolkits.axes_grid1 import ImageGrid
 from pytorch_lightning.utilities.cli import LightningCLI
 
-from .. import dataset, trainer, wave
+from .. import dataset, wave
 
 
 def geometry(arg: str) -> Tuple[int, int]:
@@ -36,7 +36,7 @@ class GenerateLightningCLI(InstantiateOnlyLightningCLI):
 def main():
     cli = GenerateLightningCLI(
         wave.WaveNetBase,
-        trainer.FSeriesDataModule,
+        dataset.FSeriesDataModule,
         subclass_mode_model=True,
     )
     cfg = cli.config

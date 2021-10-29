@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any, Callable, Dict, Iterator, Tuple, Union
+from typing import Any, Callable, Dict, Tuple, Union
 
 import torch
 import torch.utils.data
+import pytorch_lightning as pl
 
 from .fseries import PI, fseries_amp_phase
 
@@ -199,7 +200,7 @@ def create_default_datasets(
         num_tsamples=1024,
         dt=0.02,
         tstart_range=0.0,
-        period_range=(5, 15),
+        period_range=(5, 10),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
@@ -222,7 +223,7 @@ def create_default_datasets(
         num_tsamples=1024,
         dt=0.02,
         tstart_range=0.0,
-        period_range=10.0,
+        period_range=(5, 10),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
@@ -232,6 +233,40 @@ def create_default_datasets(
     )
 
     return dataset_train, dataset_val
+
+
+class FSeriesDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        num_train_curves: int = 2 ** 13,
+        num_val_curves: int = 2 ** 9,
+        num_workers: int = 0,
+        batch_size: int = 64,
+        train_seed: int = None,
+        val_seed: int = None,
+        num_bins: int = None,
+    ):
+        super().__init__()
+        self.fseries_train, self.fseries_val = create_default_datasets(
+            num_train_curves, num_val_curves, train_seed, val_seed, num_bins=num_bins
+        )
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.fseries_train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.fseries_val,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+        )
 
 
 def main():

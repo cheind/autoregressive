@@ -199,7 +199,7 @@ def create_default_datasets(
         num_tsamples=1024,
         dt=0.02,
         tstart_range=0.0,
-        period_range=10.0,
+        period_range=(5, 15),
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),

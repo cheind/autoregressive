@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 from . import wave
 
@@ -42,6 +43,18 @@ def rolling_nstep(
         rolls_yhat.append(yhat)
         rolls_out.append(out)
     return torch.stack(rolls_yhat, 0), torch.stack(rolls_out, 0), roll_idx
+
+
+def rolling_nstep_mae(
+    roll_y: torch.Tensor, roll_idx: torch.Tensor, y: torch.Tensor
+) -> float:
+    G = roll_y.shape[-1]  # number of elements predicted in roll
+    sum_loss = 0.0
+    num_pred = 0
+    for yhat, idx in zip(roll_y, roll_idx):
+        sum_loss = sum_loss + F.l1_loss(yhat, y[..., idx : idx + G], reduction="sum")
+        num_pred = num_pred + yhat.numel()
+    return sum_loss / num_pred
 
 
 if __name__ == "__main__":

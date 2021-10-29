@@ -3,6 +3,7 @@ import torch
 from .. import wave, losses
 
 
+@torch.no_grad()
 def test_rolling_nstep():
     torch.manual_seed(123)
     model = wave.WaveNetBase(
@@ -68,6 +69,37 @@ def test_rolling_nstep():
         random_rolls=False,
     )
     assert torch.allclose(yidx, torch.tensor([7, 8]))
+
+
+@torch.no_grad()
+def test_rolling_nstep_mae():
+    torch.manual_seed(123)
+    model = wave.WaveNetBase(
+        in_channels=1,
+        out_channels=1,
+        wave_channels=8,
+        num_blocks=1,
+        num_layers_per_block=3,
+    )
+    assert model.receptive_field == 8
+    seq = torch.rand(2, 1, 16)
+    x = seq[..., :-1]
+    y = model(x)  # untrained model, use model forward as surrogate
+
+    roll_y, _, roll_idx = losses.rolling_nstep(
+        model,
+        lambda model, obs, x: x,
+        x,
+        num_generate=2,
+        detach_sample=True,
+        skip_partial=True,
+    )
+    # The first generated item should be equivalent to what the model yields
+    loss = losses.rolling_nstep_mae(roll_y[..., :1], roll_idx, y)
+    assert torch.allclose(loss, torch.tensor(0.0))
+    # More should introduce an error for an untrained model
+    loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
+    assert loss > 0.0
 
     # print(yhat.shape, yout.shape, starts.shape)
     # print(starts)

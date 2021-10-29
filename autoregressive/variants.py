@@ -66,32 +66,20 @@ class RegressionWaveNet(wave.WaveNetBase):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        yr, samples, _ = self._step(
-            batch, num_forecast=64, max_sequences=batch["x"].shape[0]
-        )
-        loss = F.l1_loss(samples, yr)
-        self.log("val_loss", loss, prog_bar=True)
-
-    def _step(self, batch, num_forecast: int, max_sequences: int) -> torch.FloatTensor:
         x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
         y: torch.Tensor = batch["xo"][..., 1:].unsqueeze(1)
-        _, yr, samples, outputs = losses.rolling_nstep(
+
+        roll_y, _, roll_idx = losses.rolling_nstep(
             self,
             self.create_sampler(),
             x,
-            y,
-            num_forecast=num_forecast,
-            max_sequences=max_sequences,
-            detach_sample=True,
+            num_generate=64,
+            max_rolls=8,
+            random_rolls=False,
+            skip_partial=self.train_full_receptive_field,
         )
-        return yr, samples, outputs
-
-        # y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
-        # n = y.shape[-1]
-        # yhat = self(x)
-        # r = self.receptive_field if self.train_full_receptive_field else 0
-        # losses = F.l1_loss(yhat[..., r:n], y[..., r:], reduction="none")
-        # return torch.mean(losses * self.l1_weights)
+        loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
+        self.log("val_loss", loss, prog_bar=True)
 
     def _exp_weights(self, T, n):
         """Returns exponential decaying weights for T terms from 1.0 down to n (n>0)"""

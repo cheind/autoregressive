@@ -100,9 +100,3 @@ def test_rolling_nstep_mae():
     # More should introduce an error for an untrained model
     loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
     assert loss > 0.0
-
-    # print(yhat.shape, yout.shape, starts.shape)
-    # print(starts)
-    # print(yhat[0, 0, 0])
-    # print(yhat[1, 0, 0])
-    # print(yhat[2, 0, 0])

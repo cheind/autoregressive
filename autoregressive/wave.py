@@ -56,9 +56,10 @@ class WaveNetLayer(torch.nn.Module):
     def __init__(self, dilation: int, wave_channels: int = 32):
         super().__init__()
         self.dilation = dilation
+        self.wave_channels = wave_channels
         self.conv_dilation = torch.nn.Conv1d(
             wave_channels,
-            wave_channels,
+            2 * wave_channels,  # See PixelCNN
             kernel_size=2,
             dilation=dilation,
         )
@@ -81,13 +82,14 @@ class WaveNetLayer(torch.nn.Module):
             self.conv_dilation.bias,
             dilation=d,
         )
-        N = x_dilated.shape[-1]
-        x_filter = torch.tanh(x_dilated)
-        x_gate = torch.sigmoid(x_dilated)
+        T = x_dilated.shape[-1]
+
+        x_filter = torch.tanh(x_dilated[:, : self.wave_channels])
+        x_gate = torch.sigmoid(x_dilated[:, self.wave_channels :])
         x_h = x_gate * x_filter
         skip = self.conv_skip(x_h)
-        identity = x[..., -N:]
-        return identity + skip, skip
+        out = x[..., -T:] + skip  # trim-off causal padded results
+        return out, skip
 
 
 class WaveNetHead(torch.nn.Module):

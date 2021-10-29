@@ -197,7 +197,7 @@ class WaveNetBase(pl.LightningModule):
         batch_size: int = 1,
     ) -> FastQueues:
         queues = []
-        for layer in zip(self.wave_layers):
+        for layer in self.wave_layers:
             layer: WaveNetLayer
             q = torch.zeros(
                 (batch_size, self.wave_channels, layer.dilation),

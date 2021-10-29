@@ -262,9 +262,9 @@ def generate_fast(
     initial_obs: torch.Tensor,
     sampler: ObservationSampler,
     detach_sample: bool = True,
+    layer_inputs: List[torch.Tensor] = None,
 ) -> WaveGenerator:
-    B, C, T = initial_obs.shape
-    R = model.receptive_field
+    B, _, T = initial_obs.shape
     if T < 1:
         raise ValueError("Need at least one observation to bootstrap.")
     # prepare queues
@@ -275,7 +275,10 @@ def generate_fast(
             batch_size=B,
         )
     else:
-        _, layer_inputs, _ = model.encode(initial_obs[..., :-1])
+        if layer_inputs is None:
+            _, layer_inputs, _ = model.encode(initial_obs[..., :-1])
+        else:
+            layer_inputs = [inp[..., :-1] for inp in layer_inputs]
         queues = model.create_initialized_queues(layer_inputs)
     # generate
     obs = initial_obs[..., -1:]

@@ -43,12 +43,22 @@ def test_generators():
     assert torch.allclose(yfast_outputs.squeeze(), y.squeeze(), atol=1e-4)
 
     # Next, we compare the generators for equality when predicting more than
-    # one element
+    # one element, given a single observation (i.e empty queues)
     gslow = wave.generate(net, x[..., :1], sampler=identity_sampler)
-    gfast = wave.generate(net, x[..., :1], sampler=identity_sampler)
+    gfast = wave.generate_fast(net, x[..., :1], sampler=identity_sampler)
     yslow_samples, _ = wave.slice_generator(gslow, 60)
     yfast_samples, _ = wave.slice_generator(gfast, 60)
     assert yslow_samples.shape == (1, 1, 60)
     assert torch.allclose(yslow_samples, yfast_samples, atol=1e-4)
 
-    # gfast = wave.generate_fast(net, x[..., :1], sampler=identity_sampler)
+    # Finally, we check verify that providing pre-computed layerinputs work
+    # as expected.
+    gslow = wave.generate(net, x, sampler=identity_sampler)
+    _, layer_inputs, _ = net.encode(x)
+    gfast = wave.generate_fast(
+        net, x, sampler=identity_sampler, layer_inputs=layer_inputs
+    )
+    yslow_samples, _ = wave.slice_generator(gslow, 60)
+    yfast_samples, _ = wave.slice_generator(gfast, 60)
+    assert yslow_samples.shape == (1, 1, 60)
+    assert torch.allclose(yslow_samples, yfast_samples, atol=1e-4)

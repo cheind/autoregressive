@@ -103,7 +103,7 @@ class WaveNetHead(torch.nn.Module):
             torch.nn.Conv1d(wave_channels, out_channels, kernel_size=1),
         )
 
-    def forward(self, encoded, layer_inputs, skips):
+    def forward(self, encoded, skips):
         if self.use_skips:
             # Note skips decrease temporarily due to dilated convs,
             # so we sum only the ones corresponding to not causal padded
@@ -156,34 +156,32 @@ class WaveNetBase(pl.LightningModule):
     def encode(self, x):
         skips = []
         layer_inputs = []
-        xcausal = causal_pad(x, 2, self.receptive_field - 1)
-        x = self.input_conv(xcausal)
+        x = causal_pad(x, 2, self.receptive_field - 1)
+        x = self.input_conv(x)
         for layer in self.wave_layers:
             layer_inputs.append(x)
             x, skip = layer(x, fast=False)
             skips.append(skip)
-        return x, layer_inputs, skips
+        return x, self._strip_layer_input_padding(layer_inputs), skips
 
     def encode_one(self, x, queues: FastQueues):
         skips = []
-        layer_inputs = []
         updated_queues = []
         x = self.input_conv(x)  # no padding here
         for layer, q in zip(self.wave_layers, queues):
-            layer_inputs.append(x)
             x, qnew = self._next_input_from_queue(q, x)
             x, skip = layer(x, fast=True)
             updated_queues.append(qnew)
             skips.append(skip)
-        return x, layer_inputs, skips, updated_queues
+        return x, skips, updated_queues
 
     def forward(self, x):
-        encoded, layer_inputs, skips = self.encode(x)
-        return self.head(encoded, layer_inputs, skips)
+        encoded, _, skips = self.encode(x)
+        return self.head(encoded, skips)
 
     def forward_one(self, x, queues: FastQueues):
-        encoded, layer_inputs, skips, queues = self.encode_one(x, queues)
-        return self.head(encoded, layer_inputs, skips), queues
+        encoded, skips, queues = self.encode_one(x, queues)
+        return self.head(encoded, skips), queues
 
     def _next_input_from_queue(self, q: torch.Tensor, x):
         h = q[..., 0:1]  # pop left (oldest)
@@ -218,6 +216,17 @@ class WaveNetBase(pl.LightningModule):
             q = layer_input[..., -layer.dilation :]
             queues.append(q)
         return queues
+
+    def _strip_layer_input_padding(self, layer_inputs: torch.Tensor) -> torch.Tensor:
+        # Note, layer inputs contain results from causal padding
+        # at front. This decreases over layers based on dilation factors.
+        # Hence when computing layer-inputs
+        result = []
+        p = self.receptive_field - 1
+        for inp, layer in zip(layer_inputs, self.wave_layers):
+            result.append(inp[..., p:])
+            p -= layer.dilation
+        return result
 
 
 class ObservationSampler(Protocol):

@@ -1,4 +1,5 @@
 torch
 pytorch_lightning
+jsonargparse
 numpy
 matplotlib

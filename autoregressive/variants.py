@@ -167,10 +167,10 @@ class QuantizedWaveNet(wave.WaveNetBase):
     def create_sampler(self, greedy: bool = False):
         def greedy_sampler(model, obs, x):
             del model, obs
-            bin = torch.argmax(x, dim=1, keepdim=True)
+            bin = torch.argmax(x, dim=1)
             return (bin.float() * self.bin_size).unsqueeze(1)
 
-        def sampler(model, obs, x):
+        def stochastic_sampler(model, obs, x):
             del model, obs
             bin = D.Categorical(logits=x.permute(0, 2, 1)).sample()
             return (bin.float() * self.bin_size).unsqueeze(1)
@@ -178,4 +178,4 @@ class QuantizedWaveNet(wave.WaveNetBase):
         if greedy:
             return greedy_sampler
         else:
-            return sampler
+            return stochastic_sampler

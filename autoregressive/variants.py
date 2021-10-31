@@ -153,7 +153,7 @@ class QuantizedWaveNet(wave.WaveNetBase):
 
         roll_y, _, roll_idx = losses.rolling_nstep(
             self,
-            self.create_sampler(),
+            self.create_sampler(greedy=True),
             x,
             num_generate=64,
             max_rolls=8,
@@ -164,10 +164,18 @@ class QuantizedWaveNet(wave.WaveNetBase):
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
-    def create_sampler(self):
+    def create_sampler(self, greedy: bool = False):
+        def greedy_sampler(model, obs, x):
+            del model, obs
+            bin = torch.argmax(x, dim=1, keepdim=True)
+            return (bin.float() * self.bin_size).unsqueeze(1)
+
         def sampler(model, obs, x):
             del model, obs
             bin = D.Categorical(logits=x.permute(0, 2, 1)).sample()
             return (bin.float() * self.bin_size).unsqueeze(1)
 
-        return sampler
+        if greedy:
+            return greedy_sampler
+        else:
+            return sampler

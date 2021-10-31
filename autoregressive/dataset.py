@@ -146,13 +146,25 @@ class Quantize:
 class Normalize:
     """Normalize to [0,1] range on a per-sample basis"""
 
+    def __init__(self, lu_range: Tuple[float, float] = None) -> None:
+        if lu_range is not None:
+            self.cmin = lu_range[0]
+            self.cmax = lu_range[1]
+        self.cmin, self.cmax = None, None
+
     def __call__(self, sample: Sample) -> Sample:
         sample["x"] = self.apply(sample["x"])
         return sample
 
     def apply(self, x: torch.Tensor):
-        cmin, cmax = x.min(), x.max()
-        return (x - cmin) / (cmax - cmin)
+        if self.cmin is None:
+            cmin, cmax = x.min(), x.max()
+        else:
+            cmin, cmax = self.cmin, self.cmax
+
+        x = (x - cmin) / (cmax - cmin)
+        x = torch.clamp(x, cmin, cmax)
+        return x
 
     @staticmethod
     def find_range(*ds: FSeriesDataset) -> Tuple[float, float]:
@@ -192,7 +204,9 @@ def create_default_datasets(
 
     transform = None
     if num_bins is not None:
-        transform = chain_transforms(Normalize(), Quantize(num_bins=num_bins))
+        transform = chain_transforms(
+            Normalize(lu_range=(-2.0, 2.0)), Quantize(num_bins=num_bins)
+        )
 
     dataset_train = FSeriesDataset(
         num_curves=num_train_curves,

@@ -134,4 +134,3 @@ def test_input_coverage():
             ]
         ),
     )
-    print(model(x))

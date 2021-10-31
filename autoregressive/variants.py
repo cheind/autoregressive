@@ -149,17 +149,18 @@ class QuantizedWaveNet(wave.WaveNetBase):
 
     def validation_step(self, batch, batch_idx):
         x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
-        y: torch.Tensor = batch["x"][..., 1:].unsqueeze(1)
-        _, yr, samples, outputs = losses.rolling_nstep(
+        y: torch.Tensor = batch["xo"][..., 1:].unsqueeze(1)
+
+        roll_y, _, roll_idx = losses.rolling_nstep(
             self,
             self.create_sampler(),
             x,
-            y,
-            num_forecast=64,
-            max_sequences=512,
-            detach_sample=True,
+            num_generate=64,
+            max_rolls=8,
+            random_rolls=False,
+            skip_partial=self.train_full_receptive_field,
         )
-        loss = F.l1_loss(samples, yr)
+        loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
@@ -168,8 +169,5 @@ class QuantizedWaveNet(wave.WaveNetBase):
             del model, obs
             bin = D.Categorical(logits=x.permute(0, 2, 1)).sample()
             return (bin.float() * self.bin_size).unsqueeze(1)
-
-            # print(x.shape, torch.argmax(x, 1, keepdim=True).shape)
-            # return torch.argmax(x, 1, keepdim=True) * self.bin_size
 
         return sampler

@@ -25,6 +25,7 @@ class FSeriesDataset(torch.utils.data.Dataset):
         bias_range: Union[float, Tuple[float, float]] = 0.0,
         coeff_range: Union[float, Tuple[float, float]] = (-1.0, 1.0),
         phase_range: Union[float, Tuple[float, float]] = (-PI, PI),
+        lineartrend_range: Union[float, Tuple[float, float]] = 0.0,
         smoothness: float = 0.0,
         transform: Callable[[Sample], Sample] = None,
         rng: torch.Generator = None,
@@ -45,6 +46,7 @@ class FSeriesDataset(torch.utils.data.Dataset):
         self.coeff_range = _make_range(coeff_range, eps)
         self.phase_range = _make_range(phase_range, eps)
         self.tstart_range = _make_range(tstart_range, eps)
+        self.lineartrend_range = _make_range(lineartrend_range, eps)
         self.num_tsamples = num_tsamples
         self.dt = dt
         self.smoothness = smoothness
@@ -63,6 +65,7 @@ class FSeriesDataset(torch.utils.data.Dataset):
         t = torch.arange(p["tstart"], self.dt * self.num_tsamples, self.dt)
         n = torch.arange(p["terms"]) + 1
         x = fseries_amp_phase(p["bias"], n, p["coeffs"], p["phase"], p["period"], t)[0]
+        x += t * p["lineark"]
         sample = {"x": x, "xo": x.clone(), "t": t}
         if self.include_params:
             sample["p"] = p
@@ -87,6 +90,7 @@ class FSeriesDataset(torch.utils.data.Dataset):
         )  # decay coefficients for higher order terms. A value of 2 will decay the last term by a factor of 0.01
         phase = uniform(self.phase_range, terms)
         tstart = uniform(self.tstart_range, 1).item()
+        lineark = uniform(self.lineartrend_range, 1).item()
 
         return {
             "terms": terms,
@@ -95,6 +99,7 @@ class FSeriesDataset(torch.utils.data.Dataset):
             "coeffs": coeffs,
             "phase": phase,
             "tstart": tstart,
+            "lineark": lineark,
         }
 
 
@@ -181,7 +186,7 @@ class Normalize:
 
 def chain_transforms(*args: Sequence[Sample]):
     """Composition of transformations"""
-    ts = list(args)
+    ts = [t for t in list(args) if t is not None]
 
     def transform(sample: Sample) -> Sample:
         for t in ts:
@@ -215,10 +220,11 @@ def create_default_datasets(
         dt=0.02,
         tstart_range=0.0,
         # period_range=(5.0, 10.0),
-        period_range=5.0,
+        period_range=10.0,
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
+        lineartrend_range=(-1e-2, 1e-2),
         smoothness=0.75,
         rng=rng,
         transform=transform,
@@ -239,10 +245,11 @@ def create_default_datasets(
         dt=0.02,
         tstart_range=0.0,
         # period_range=(5.0, 10.0),
-        period_range=5.0,
+        period_range=10.0,
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
+        lineartrend_range=(-1e-1, 1e-1),
         smoothness=0.75,
         rng=rng,
         transform=transform,
@@ -328,6 +335,7 @@ def main():
         # ax.step(s["t"], s["x"])
         ax.plot(s["t"], s["x"])
         ax.plot(s["t"], s["xo"])
+        ax.set_ylim(-2, 2)
     plt.show()
 
     # z[:-1],

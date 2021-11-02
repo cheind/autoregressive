@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import torch
 from mpl_toolkits.axes_grid1 import ImageGrid
 from pytorch_lightning.utilities.cli import LightningCLI
-from torch.utils import data
 
 from .. import dataset, wave
 
@@ -53,7 +52,7 @@ def main():
 
     dm = cli.datamodule
     ds: dataset.FSeriesDataset = dm.fseries_val
-    ds.transform = dataset.Noise(scale=1e-1, p=1.0)
+    # ds.transform = dataset.Noise(scale=1e-1, p=1.0)
     S = min(model.receptive_field + cfg["shift"], ds.num_tsamples)
 
     fig = plt.figure()

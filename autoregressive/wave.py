@@ -93,26 +93,34 @@ class WaveNetLayer(torch.nn.Module):
 
 
 class WaveNetHead(torch.nn.Module):
-    def __init__(self, wave_channels: int, out_channels: int, use_skips: bool = True):
+    def __init__(
+        self, wave_channels: int, out_channels: int, use_encoded: bool = False
+    ):
         super().__init__()
-        self.use_skips = use_skips
+        self.use_encoded = use_encoded
         self.transform = torch.nn.Sequential(
             torch.nn.ReLU(),  # note, we perform non-lin first (i.e on sum of skips)
-            torch.nn.Conv1d(wave_channels, wave_channels, kernel_size=1),
+            torch.nn.Conv1d(
+                wave_channels, wave_channels * 2, kernel_size=1
+            ),  # enlarge and squeeze (not based on paper)
             torch.nn.ReLU(),
-            torch.nn.Conv1d(wave_channels, out_channels, kernel_size=1),
+            torch.nn.Conv1d(wave_channels * 2, out_channels, kernel_size=1),
         )
 
     def forward(self, encoded, skips):
-        if self.use_skips:
-            # Note skips decrease temporarily due to dilated convs,
-            # so we sum only the ones corresponding to not causal padded
-            # results
-            N = skips[-1].shape[-1]
-            x = torch.stack([s[..., -N:] for s in skips], dim=0).sum(dim=0)
+        # Note skips decrease temporarily due to dilated convs,
+        # so we sum only the ones corresponding to not causal padded
+        # results
+        N = skips[-1].shape[-1]
+        trimmed_skips = [s[..., -N:] for s in skips]
+
+        if self.use_encoded:
+            # Last trimmed skip is not used, since it has already
+            # been added to encoded before
+            sum_terms = trimmed_skips[:-1] + [encoded]
         else:
-            x = encoded  # residual from last layer in last block
-        return self.transform(x)
+            sum_terms = trimmed_skips
+        return self.transform(torch.stack(sum_terms, dim=0).sum(dim=0))
 
 
 class WaveNetBase(pl.LightningModule):
@@ -123,7 +131,7 @@ class WaveNetBase(pl.LightningModule):
         wave_channels: int = 32,
         num_blocks: int = 1,
         num_layers_per_block: int = 7,
-        use_skips: bool = True,
+        use_encoded: bool = False,
     ):
         super().__init__()
         self.input_conv = torch.nn.Conv1d(in_channels, wave_channels, kernel_size=1)
@@ -148,7 +156,9 @@ class WaveNetBase(pl.LightningModule):
             kernel_size=2,
         )
         self.head = WaveNetHead(
-            wave_channels=wave_channels, out_channels=out_channels, use_skips=use_skips
+            wave_channels=wave_channels,
+            out_channels=out_channels,
+            use_encoded=use_encoded,
         )
         self.apply(wave_init_weights)
         _logger.info(f"Receptive field of WaveNet {self.receptive_field}")

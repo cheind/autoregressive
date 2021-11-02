@@ -40,17 +40,18 @@ def main():
         subclass_mode_model=True,
     )
     cfg = cli.config
-    model = cli.model
+    model: wave.WaveNetBase = cli.model
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     checkpoint = torch.load(cfg["ckpt"])
     model.load_state_dict(checkpoint["state_dict"])
     model = model.eval().to(dev)
+    R = model.receptive_field
     sampler = model.create_sampler()
     curve_layout = geometry(cfg["curves"])
     num_curves = curve_layout[0] * curve_layout[1]
 
     dm = cli.datamodule
-    dataset_val = dm.fseries_val
+    ds = dm.fseries_val
 
     fig = plt.figure()
     grid = ImageGrid(
@@ -65,7 +66,7 @@ def main():
     grid[0].get_xaxis().set_ticks([])
 
     # Get samples from dataset. These are n-dicts
-    curves = list(itertools.islice(dataset_val, num_curves))
+    curves = list(itertools.islice(ds, num_curves))
 
     # Prepare observations. We batch all observations and then repeat
     # these observations for the number of trajectories
@@ -77,28 +78,28 @@ def main():
     if cfg["fast_wavenet"]:
         g = wave.generate_fast(
             model=model,
-            initial_obs=obs[..., :-1],
+            initial_obs=obs[..., :R],
             sampler=sampler,
         )
     else:
         g = wave.generate(
             model=model,
-            initial_obs=obs[..., :-1],
+            initial_obs=obs[..., :R],
             sampler=sampler,
         )
 
     t0 = time.time()
     trajs, _ = wave.slice_generator(g, stop=cfg["num_steps"])  # (B,1,T)
     trajs = trajs.squeeze(1).cpu()
+    dt = ds.dt
+    tn = torch.arange(R, R + cfg["num_steps"], 1) * dt
+
     print(f"Generation took {(time.time()-t0):.3f} secs")
 
     # Plot
     for idx, (ax, s) in enumerate(zip(grid, curves)):
         xo, t = s["x"], s["t"]
-        dt = t[-1] - t[-2]
-        tn = torch.arange(0.0, dt * cfg["num_steps"], dt) + t[-1]
-
-        ax.plot(t, xo, c="k", linewidth=0.5, label="input")
+        ax.plot(t, xo, c="k", linewidth=0.5, label="input", linestyle="--")
         for tidx, xn in enumerate(trajs[idx::num_curves]):
             # Note, above we step with num_curves to get all trajectories
             # for this axis. Related to repeat statement above.

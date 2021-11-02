@@ -27,7 +27,7 @@ class RegressionWaveNet(wave.WaveNetBase):
             wave_channels=wave_channels,
             num_blocks=num_blocks,
             num_layers_per_block=num_layers_per_block,
-            use_skips=True,
+            use_encoded=False,
         )
         self.train_full_receptive_field = train_full_receptive_field
         self.train_exp_decay = train_exp_decay
@@ -51,7 +51,7 @@ class RegressionWaveNet(wave.WaveNetBase):
                     opt,
                     mode="min",
                     factor=0.5,
-                    patience=20,
+                    patience=50,
                     min_lr=5e-6,
                     threshold=1e-7,
                 ),

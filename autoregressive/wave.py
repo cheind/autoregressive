@@ -59,7 +59,7 @@ class WaveNetLayer(torch.nn.Module):
         self.wave_channels = wave_channels
         self.conv_dilation = torch.nn.Conv1d(
             wave_channels,
-            2 * wave_channels,  # See PixelCNN
+            2 * wave_channels,  # See PixelCNN, we stack W f,k and W g,k
             kernel_size=2,
             dilation=dilation,
         )
@@ -285,7 +285,9 @@ def generate_fast(
         )
     else:
         if layer_inputs is None:
-            _, layer_inputs, _ = model.encode(initial_obs[..., :-1])
+            _, layer_inputs, _ = model.encode(
+                initial_obs[..., :-1]
+            )  # TODO we should encode only necessary inputs
         else:
             layer_inputs = [inp[..., :-1] for inp in layer_inputs]
         queues = model.create_initialized_queues(layer_inputs)

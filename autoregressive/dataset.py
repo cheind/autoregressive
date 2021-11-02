@@ -211,10 +211,11 @@ def create_default_datasets(
     dataset_train = FSeriesDataset(
         num_curves=num_train_curves,
         num_fterms=(3, 5),
-        num_tsamples=1024,
+        num_tsamples=2048,
         dt=0.02,
         tstart_range=0.0,
-        period_range=(2.0, 5.0),
+        # period_range=(5.0, 10.0),
+        period_range=5.0,
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
@@ -234,10 +235,11 @@ def create_default_datasets(
     dataset_val = FSeriesDataset(
         num_curves=num_val_curves,
         num_fterms=(3, 5),
-        num_tsamples=1024,
+        num_tsamples=2048,
         dt=0.02,
         tstart_range=0.0,
-        period_range=(2.0, 5.0),
+        # period_range=(5.0, 10.0),
+        period_range=5.0,
         bias_range=0,
         coeff_range=(-1.0, 1.0),
         phase_range=(-PI, PI),
@@ -287,20 +289,28 @@ def main():
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import ImageGrid
 
-    ds = FSeriesDataset(
-        num_curves=2 ** 8,
-        num_fterms=(3, 5),
-        num_tsamples=500,
-        dt=0.02,
-        period_range=(10.0, 12.0),
-        bias_range=(-1.0, 1.0),
-        coeff_range=(-1.0, 1.0),
-        phase_range=(-PI, PI),
-        # include_params=True,
-        smoothness=0.75,
-        transform=chain_transforms(Normalize(), Quantize(num_bins=32)),
-        rng=torch.Generator().manual_seed(123),
+    ds, _ = create_default_datasets(
+        num_train_curves=8192, num_val_curves=512, train_seed=123, val_seed=123
     )
+
+    #     ds = FSeriesDataset(
+    #         num_train_curves=8192,
+    #         num_val_curves=512
+    #         train_seed: 123
+    #   val_seed: 123
+    #         num_curves=2 ** 8,
+    #         num_fterms=(3, 5),
+    #         num_tsamples=500,
+    #         dt=0.02,
+    #         period_range=(10.0, 12.0),
+    #         bias_range=(-1.0, 1.0),
+    #         coeff_range=(-1.0, 1.0),
+    #         phase_range=(-PI, PI),
+    #         # include_params=True,
+    #         smoothness=0.75,
+    #         transform=chain_transforms(Normalize(), Quantize(num_bins=32)),
+    #         rng=torch.Generator().manual_seed(123),
+    #     )
 
     # print(Normalize.find_range(*create_default_datasets()))
 
@@ -312,7 +322,7 @@ def main():
     # print(data["x"][..., :10])
 
     fig = plt.figure(figsize=(8.0, 8.0))
-    grid = ImageGrid(fig, 111, nrows_ncols=(2, 1), axes_pad=0.05, share_all=False)
+    grid = ImageGrid(fig, 111, nrows_ncols=(10, 1), axes_pad=0.05, share_all=False)
 
     for ax, s in zip(grid, ds):
         # ax.step(s["t"], s["x"])

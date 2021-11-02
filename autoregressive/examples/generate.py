@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import torch
 from mpl_toolkits.axes_grid1 import ImageGrid
 from pytorch_lightning.utilities.cli import LightningCLI
+from torch.utils import data
 
 from .. import dataset, wave
 
@@ -24,6 +25,7 @@ class GenerateLightningCLI(InstantiateOnlyLightningCLI):
     def add_arguments_to_parser(self, parser) -> None:
         parser.add_argument("-num-traj", type=int, default=1)
         parser.add_argument("-num-steps", type=int, default=512)
+        parser.add_argument("-shift", type=int, default=0)
         parser.add_argument("-curves", default="4x1", metavar="ROWSxCOLS")
         parser.add_argument(
             "--fast-wavenet", action=argparse.BooleanOptionalAction, default=True
@@ -45,13 +47,14 @@ def main():
     checkpoint = torch.load(cfg["ckpt"])
     model.load_state_dict(checkpoint["state_dict"])
     model = model.eval().to(dev)
-    R = model.receptive_field
     sampler = model.create_sampler()
     curve_layout = geometry(cfg["curves"])
     num_curves = curve_layout[0] * curve_layout[1]
 
     dm = cli.datamodule
-    ds = dm.fseries_val
+    ds: dataset.FSeriesDataset = dm.fseries_val
+    ds.transform = dataset.Noise(scale=1e-1, p=1.0)
+    S = min(model.receptive_field + cfg["shift"], ds.num_tsamples)
 
     fig = plt.figure()
     grid = ImageGrid(
@@ -78,13 +81,13 @@ def main():
     if cfg["fast_wavenet"]:
         g = wave.generate_fast(
             model=model,
-            initial_obs=obs[..., :R],
+            initial_obs=obs[..., :S],
             sampler=sampler,
         )
     else:
         g = wave.generate(
             model=model,
-            initial_obs=obs[..., :R],
+            initial_obs=obs[..., :S],
             sampler=sampler,
         )
 
@@ -92,7 +95,7 @@ def main():
     trajs, _ = wave.slice_generator(g, stop=cfg["num_steps"])  # (B,1,T)
     trajs = trajs.squeeze(1).cpu()
     dt = ds.dt
-    tn = torch.arange(R, R + cfg["num_steps"], 1) * dt
+    tn = torch.arange(S, S + cfg["num_steps"], 1) * dt
 
     print(f"Generation took {(time.time()-t0):.3f} secs")
 

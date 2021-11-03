@@ -63,7 +63,7 @@ def hypertune(num_samples=10, max_epochs=30, gpus_per_trial=1):
         tune.with_parameters(
             train_tune, max_epochs=max_epochs, num_gpus=gpus_per_trial, batch_size=64
         ),
-        resources_per_trial={"cpu": 1, "gpu": 1},
+        resources_per_trial={"cpu": 1, "gpu": 0.5},
         metric="loss",
         mode="min",
         config=config,

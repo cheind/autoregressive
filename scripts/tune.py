@@ -50,7 +50,11 @@ def hypertune(num_samples=10, max_epochs=30, gpus_per_trial=0.5):
         "sched_patience": tune.choice([5, 25, 50]),
     }
 
-    scheduler = ASHAScheduler(max_t=max_epochs, grace_period=1, reduction_factor=2)
+    scheduler = ASHAScheduler(
+        max_t=max_epochs,
+        grace_period=10,
+        reduction_factor=2,
+    )
     reporter = CLIReporter(
         parameter_columns=[
             "wave_channels",

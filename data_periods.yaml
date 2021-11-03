@@ -7,4 +7,4 @@ data:
     num_curves: 256
     period_range:
     - 5.0
-    - 7.0
+    - 7

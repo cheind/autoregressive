@@ -106,7 +106,7 @@ def hypertune(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-num-samples", type=int, default=30)
-    parser.add_argument("-gpu-per-trial", type=float, default=1.0)
+    parser.add_argument("-gpu-per-trial", type=float, default=0.5)
     parser.add_argument("-num-epochs", type=int, default=30)
     parser.add_argument("-experiment-name", default="tune_regression")
     parser.add_argument("-train-seed", type=int, default=None)

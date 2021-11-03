@@ -35,7 +35,9 @@ def train_tune(
 ):
 
     tunecb = TuneReportCheckpointCallback(
-        {"loss": "val_loss"}, on="validation_end", filename="checkpoint"
+        {"val_loss": "val_loss_epoch", "train_loss": "train_loss_epoch"},
+        on="validation_end",
+        filename="checkpoint",
     )
     lrcb = LearningRateMonitor(logging_interval="step")
 
@@ -90,7 +92,7 @@ def hypertune(args):
             "num_blocks",
             "num_layers_per_block",
         ],
-        metric_columns=["loss", "training_iteration"],
+        metric_columns=["val_loss", "train_loss", "training_iteration"],
     )
     analysis = tune.run(
         tune.with_parameters(
@@ -101,7 +103,7 @@ def hypertune(args):
             batch_size=64,
         ),
         resources_per_trial={"cpu": 1, "gpu": args.gpu_per_trial},
-        metric="loss",
+        metric="val_loss",
         mode="min",
         config=config,
         num_samples=args.num_samples,

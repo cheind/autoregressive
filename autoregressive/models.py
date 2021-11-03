@@ -89,7 +89,7 @@ class RegressionWaveNet(wave.WaveNetBase):
             )
             loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
         self.log("train_loss", loss)
-        return loss
+        return {"loss": loss, "train_loss": loss}
 
     def validation_step(self, batch, batch_idx):
         x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
@@ -107,9 +107,13 @@ class RegressionWaveNet(wave.WaveNetBase):
         loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
         return {"val_loss": loss}
 
+    def training_epoch_end(self, outputs) -> None:
+        avg_loss = torch.stack([x["train_loss"] for x in outputs]).mean()
+        self.log("train_loss_epoch", avg_loss, prog_bar=True)
+
     def validation_epoch_end(self, outputs) -> None:
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        self.log("val_loss", avg_loss, prog_bar=True)
+        self.log("val_loss_epoch", avg_loss, prog_bar=True)
 
     def create_sampler(self):
         def sampler(model: RegressionWaveNet, obs: torch.Tensor, x: torch.Tensor):

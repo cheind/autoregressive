@@ -1,0 +1,10 @@
+data:
+  train_fseries_params:
+    period_range:
+    - 5
+    - 7
+  val_fseries_params:
+    num_curves: 256
+    period_range:
+    - 5
+    - 7

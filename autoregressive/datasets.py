@@ -229,10 +229,13 @@ class FSeriesDataModule(pl.LightningDataModule):
         ),
     ):
         super().__init__()
+        self.train_fseries_params = train_fseries_params
+        self.val_fseries_params = val_fseries_params
         self.train_ds = FSeriesDataset(**dataclasses.asdict(train_fseries_params))
         self.val_ds = FSeriesDataset(**dataclasses.asdict(val_fseries_params))
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.save_hyperparameters()
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
@@ -249,6 +252,9 @@ class FSeriesDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             shuffle=False,
         )
+
+    def __str__(self) -> str:
+        return f"train_params: {self.train_fseries_params}\n val_params:{self.val_fseries_params}"
 
 
 def main():

@@ -1,6 +1,7 @@
 import math
 import os
 import argparse
+from pathlib import Path
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor
@@ -14,14 +15,23 @@ from ray.tune import CLIReporter
 from autoregressive import datasets, models
 
 
+def load_datamodule_from_path(path):
+    from jsonargparse import ArgumentParser
+
+    parser = ArgumentParser()
+    parser.add_class_arguments(datasets.FSeriesDataModule, "data")
+    cfg = parser.parse_path(path)
+    cfg = parser.instantiate_classes(cfg)
+    return cfg["data"]
+
+
 def train_tune(
     config,
     checkpoint_dir=None,
     num_epochs: int = 30,
     batch_size: int = 64,
     gpu_per_trial: float = 1.0,
-    train_seed: int = None,
-    val_seed: int = None,
+    data_config_path: str = None,
 ):
 
     tunecb = TuneReportCheckpointCallback(
@@ -43,14 +53,17 @@ def train_tune(
     if checkpoint_dir:
         kwargs["resume_from_checkpoint"] = os.path.join(checkpoint_dir, "checkpoint")
 
-    train_params = datasets.FSeriesParams(smoothness=0.75, seed=train_seed)
-    val_params = datasets.FSeriesParams(smoothness=0.75, num_curves=512, seed=val_seed)
-    dm = datasets.FSeriesDataModule(
-        batch_size=batch_size,
-        train_fseries_params=train_params,
-        val_fseries_params=val_params,
-    )
-
+    if data_config_path:
+        dm = load_datamodule_from_path(str(data_config_path))
+    else:
+        train_params = datasets.FSeriesParams(smoothness=0.75)
+        val_params = datasets.FSeriesParams(smoothness=0.75, num_curves=512)
+        dm = datasets.FSeriesDataModule(
+            batch_size=batch_size,
+            train_fseries_params=train_params,
+            val_fseries_params=val_params,
+        )
+    print(dm)
     model = models.RegressionWaveNet(**config)
 
     trainer = pl.Trainer(**kwargs)
@@ -84,8 +97,7 @@ def hypertune(args):
             train_tune,
             num_epochs=args.num_epochs,
             gpu_per_trial=args.gpu_per_trial,
-            train_seed=args.train_seed,
-            val_seed=args.val_seed,
+            data_config_path=args.data_config,
             batch_size=64,
         ),
         resources_per_trial={"cpu": 1, "gpu": args.gpu_per_trial},
@@ -99,6 +111,7 @@ def hypertune(args):
         name=args.experiment_name,
         trial_dirname_creator=lambda trial: str(trial),
         log_to_file=True,
+        raise_on_failed_trial=False,
     )
     print("Best hyperparameters found were: ", analysis.best_config)
 
@@ -109,16 +122,22 @@ def main():
     parser.add_argument("-gpu-per-trial", type=float, default=0.5)
     parser.add_argument("-num-epochs", type=int, default=30)
     parser.add_argument("-experiment-name", default="tune_regression")
-    parser.add_argument("-train-seed", type=int, default=None)
-    parser.add_argument("-val-seed", type=int, default=None)
+    parser.add_argument(
+        "-data-config",
+        type=Path,
+        default=None,
+        help="Path to config containing data module config",
+    )
     parser.add_argument(
         "--smoke-test", action="store_true", help="Finish quickly for testing"
     )
     args = parser.parse_args()
+    if args.data_config:
+        assert args.data_config.exists()
+        args.data_config = args.data_config.resolve()
     if args.smoke_test:
         args.num_epochs = 1
         args.num_samples = 1
-        args.gpu_per_trial = 0.0
     hypertune(args)
 
 

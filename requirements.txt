@@ -1,6 +1,6 @@
 torch
 pytorch_lightning
-jsonargparse
+jsonargparse[signatures]
 numpy
 matplotlib
 ray[tune]

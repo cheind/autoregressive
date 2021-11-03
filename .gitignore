@@ -132,3 +132,4 @@ dmypy.json
 tmp/*
 !tmp/__keep__
 lightning_logs/*
+ray_results/*

@@ -41,7 +41,9 @@ def train_tune(config, checkpoint_dir=None, max_epochs=30, batch_size=64, num_gp
     trainer.fit(model, datamodule=dm)
 
 
-def hypertune(num_samples=30, max_epochs=30, gpus_per_trial=0.5):
+def hypertune(
+    num_samples=30, max_epochs=30, gpus_per_trial=0.5, tune_tag="regression_tune"
+):
     config = {
         "wave_channels": tune.choice([16, 32, 64]),
         "num_blocks": tune.choice([1, 4, 8]),
@@ -84,8 +86,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-num-samples", type=int, default=30)
     parser.add_argument("-max-epochs", type=int, default=30)
+    parser.add_argument("-name", default="tune_regression")
     args = parser.parse_args()
-    hypertune(num_samples=args.num_samples, max_epochs=args.max_epochs)
+    hypertune(
+        num_samples=args.num_samples, max_epochs=args.max_epochs, tune_tag=args.name
+    )
 
 
 if __name__ == "__main__":

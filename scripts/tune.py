@@ -98,6 +98,7 @@ def hypertune(args):
         local_dir="./ray_results",
         name=args.experiment_name,
         trial_dirname_creator=lambda trial: str(trial),
+        log_to_file=True,
     )
     print("Best hyperparameters found were: ", analysis.best_config)
 

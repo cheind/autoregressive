@@ -41,7 +41,7 @@ def train_tune(config, checkpoint_dir=None, max_epochs=30, batch_size=64, num_gp
     trainer.fit(model, datamodule=dm)
 
 
-def hypertune(num_samples=10, max_epochs=30, gpus_per_trial=0.5):
+def hypertune(num_samples=30, max_epochs=30, gpus_per_trial=0.5):
     config = {
         "wave_channels": tune.choice([16, 32, 64]),
         "num_blocks": tune.choice([1, 4, 8]),

@@ -44,8 +44,8 @@ def train_tune(config, checkpoint_dir=None, max_epochs=30, batch_size=64, num_gp
 def hypertune(num_samples=10, max_epochs=30, gpus_per_trial=0.5):
     config = {
         "wave_channels": tune.choice([16, 32, 64]),
-        "num_blocks": tune.choice([1, 4, 8, 9]),
-        "num_layers_per_block": tune.choice([3, 5, 9]),
+        "num_blocks": tune.choice([1, 4, 8]),
+        "num_layers_per_block": tune.choice([3, 5, 9, 12]),
         "lr": tune.loguniform(1e-4, 1e-1),
         "sched_patience": tune.choice([5, 25, 50]),
     }

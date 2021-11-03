@@ -70,6 +70,7 @@ def hypertune(num_samples=10, max_epochs=30, gpus_per_trial=1):
         num_samples=num_samples,
         scheduler=scheduler,
         progress_reporter=reporter,
+        local_dir="./ray_results",
         name="tune_regression",
     )
     print("Best hyperparameters found were: ", analysis.best_config)

@@ -1,7 +1,7 @@
+import dataclasses
 import logging
 import torch
 import torch.nn.functional as F
-import torch.distributions as D
 
 from . import wave, losses
 
@@ -9,16 +9,25 @@ _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
 
 
+@dataclasses.dataclass
+class TrainParams:
+    skip_incomplete_receptive_field: bool = True
+    unroll_steps: int = 1
+    lr: float = 1e-3
+    patience: int = 25
+
+
 class RegressionWaveNet(wave.WaveNetBase):
     def __init__(
         self,
         in_channels: int = 1,
         wave_channels: int = 64,
-        num_blocks: int = 1,
-        num_layers_per_block: int = 9,
-        train_full_receptive_field: bool = True,
-        train_exp_decay: bool = False,
-        train_unroll_steps: int = 1,
+        num_blocks: int = 4,
+        num_layers_per_block: int = 8,
+        skip_incomplete_receptive_field: bool = True,
+        loss_unroll_steps: int = 1,
+        lr: float = 1e-3,
+        sched_patience: int = 25,
     ) -> None:
         super().__init__(
             in_channels=in_channels,
@@ -28,15 +37,16 @@ class RegressionWaveNet(wave.WaveNetBase):
             num_layers_per_block=num_layers_per_block,
             use_encoded=False,
         )
-        self.train_full_receptive_field = train_full_receptive_field
-        self.train_exp_decay = train_exp_decay
-        self.train_unroll_steps = train_unroll_steps
+        self.skip_incomplete_receptive_field = skip_incomplete_receptive_field
+        self.loss_unroll_steps = loss_unroll_steps
+        self.lr = lr
+        self.sched_patience = sched_patience
         super().save_hyperparameters()
 
     def configure_optimizers(self):
         import torch.optim.lr_scheduler as sched
 
-        opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+        opt = torch.optim.Adam(self.parameters(), lr=self.lr)
         return {
             "optimizer": opt,
             "lr_scheduler": {
@@ -44,7 +54,7 @@ class RegressionWaveNet(wave.WaveNetBase):
                     opt,
                     mode="min",
                     factor=0.5,
-                    patience=50,
+                    patience=self.sched_patience,
                     min_lr=5e-6,
                     threshold=1e-7,
                 ),
@@ -56,13 +66,13 @@ class RegressionWaveNet(wave.WaveNetBase):
         }
 
     def training_step(self, batch, batch_idx):
-        if self.train_unroll_steps == 1:
+        if self.loss_unroll_steps == 1:
             x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
             y: torch.Tensor = batch["xo"][..., 1:]
             y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
             n = y.shape[-1]
             yhat = self(x)
-            r = self.receptive_field if self.train_full_receptive_field else 0
+            r = self.receptive_field if self.skip_incomplete_receptive_field else 0
             loss = F.l1_loss(yhat[..., r:n], y[..., r:])
         else:
             x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
@@ -71,10 +81,10 @@ class RegressionWaveNet(wave.WaveNetBase):
                 self,
                 self.create_sampler(),
                 x,
-                num_generate=self.train_unroll_steps,
+                num_generate=self.loss_unroll_steps,
                 max_rolls=32,
                 random_rolls=True,
-                skip_partial=self.train_full_receptive_field,
+                skip_partial=self.skip_incomplete_receptive_field,
                 detach_sample=False,
             )
             loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
@@ -92,7 +102,7 @@ class RegressionWaveNet(wave.WaveNetBase):
             num_generate=64,
             max_rolls=8,
             random_rolls=False,
-            skip_partial=self.train_full_receptive_field,
+            skip_partial=self.skip_incomplete_receptive_field,
         )
         loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
         return {"val_loss": loss}

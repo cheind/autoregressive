@@ -3,3 +3,4 @@ pytorch_lightning
 jsonargparse
 numpy
 matplotlib
+ray[tune]

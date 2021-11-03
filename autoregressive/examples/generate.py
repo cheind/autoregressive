@@ -51,7 +51,7 @@ def main():
     num_curves = curve_layout[0] * curve_layout[1]
 
     dm = cli.datamodule
-    ds: datasets.FSeriesDataset = dm.ds_val
+    ds: datasets.FSeriesDataset = dm.val_ds
     # ds.transform = datasets.Noise(scale=1e-1, p=1.0)
     S = min(model.receptive_field + cfg["shift"], ds.num_tsamples)
 

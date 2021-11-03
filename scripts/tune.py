@@ -47,8 +47,8 @@ def hypertune(
     config = {
         "wave_channels": tune.choice([16, 32, 64]),
         "num_blocks": tune.choice([1, 4, 8]),
-        "num_layers_per_block": tune.choice([3, 5, 9, 12]),
-        "lr": tune.loguniform(1e-4, 1e-1),
+        "num_layers_per_block": tune.choice([5, 9, 12]),
+        "lr": tune.choice([1e-3, 1e-4]),
         "sched_patience": tune.choice([5, 25, 50]),
     }
 

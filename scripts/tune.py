@@ -54,7 +54,7 @@ def hypertune(
 
     scheduler = ASHAScheduler(
         max_t=max_epochs,
-        grace_period=10,
+        grace_period=min(10, max_epochs),
         reduction_factor=2,
     )
     reporter = CLIReporter(
@@ -77,7 +77,8 @@ def hypertune(
         scheduler=scheduler,
         progress_reporter=reporter,
         local_dir="./ray_results",
-        name="tune_regression",
+        name=tune_tag,
+        trial_dirname_creator=lambda trial: str(trial),
     )
     print("Best hyperparameters found were: ", analysis.best_config)
 
@@ -87,10 +88,16 @@ def main():
     parser.add_argument("-num-samples", type=int, default=30)
     parser.add_argument("-max-epochs", type=int, default=30)
     parser.add_argument("-name", default="tune_regression")
-    args = parser.parse_args()
-    hypertune(
-        num_samples=args.num_samples, max_epochs=args.max_epochs, tune_tag=args.name
+    parser.add_argument(
+        "--smoke-test", action="store_true", help="Finish quickly for testing"
     )
+    args = parser.parse_args()
+    if args.smoke_test:
+        hypertune(num_samples=1, max_epochs=1, gpus_per_trial=0, tune_tag=args.name)
+    else:
+        hypertune(
+            num_samples=args.num_samples, max_epochs=args.max_epochs, tune_tag=args.name
+        )
 
 
 if __name__ == "__main__":

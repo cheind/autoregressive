@@ -112,6 +112,7 @@ def hypertune(args):
         trial_dirname_creator=lambda trial: str(trial),
         log_to_file=True,
         raise_on_failed_trial=False,
+        verbose=1,
     )
     print("Best hyperparameters found were: ", analysis.best_config)
 

@@ -7,7 +7,7 @@ from pytorch_lightning.callbacks import (
     EarlyStopping,
 )
 
-from . import dataset, wave
+from . import datasets, wave
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -115,7 +115,7 @@ def cli_main():
 
     _ = MyLightningCLI(
         wave.WaveNetBase,
-        dataset.FSeriesDataModule,
+        datasets.FSeriesDataModule,
         subclass_mode_model=True,
         # seed_everything_default=1234,
         # run=False,

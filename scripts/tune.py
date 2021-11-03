@@ -41,7 +41,7 @@ def train_tune(config, checkpoint_dir=None, max_epochs=30, batch_size=64, num_gp
     trainer.fit(model, datamodule=dm)
 
 
-def hypertune(num_samples=10, max_epochs=30, gpus_per_trial=1):
+def hypertune(num_samples=10, max_epochs=30, gpus_per_trial=0.5):
     config = {
         "wave_channels": tune.choice([16, 32, 64]),
         "num_blocks": tune.choice([1, 4, 8]),
@@ -63,7 +63,7 @@ def hypertune(num_samples=10, max_epochs=30, gpus_per_trial=1):
         tune.with_parameters(
             train_tune, max_epochs=max_epochs, num_gpus=gpus_per_trial, batch_size=64
         ),
-        resources_per_trial={"cpu": 1, "gpu": 0.5},
+        resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         metric="loss",
         mode="min",
         config=config,

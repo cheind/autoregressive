@@ -76,10 +76,10 @@ class RegressionWaveNet(wave.WaveNetBase):
                 self.create_sampler(),
                 x,
                 num_generate=self.loss_unroll_steps,
-                max_rolls=32,
+                max_rolls=1,  # one random roll per batch element
                 random_rolls=True,
                 skip_partial=self.skip_incomplete_receptive_field,
-                detach_sample=False,
+                detach_sample=True,
             )
             loss = losses.rolling_nstep_mae(
                 roll_y, roll_idx, y, margin=self.loss_margin

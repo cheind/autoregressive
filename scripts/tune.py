@@ -92,6 +92,8 @@ def hypertune(args):
             "wave_channels",
             "num_blocks",
             "num_layers_per_block",
+            "loss_unroll_steps",
+            "loss_margin",
         ],
         metric_columns=["val_loss", "train_loss", "training_iteration"],
     )

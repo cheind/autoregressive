@@ -171,11 +171,6 @@ def main():
     dm = FSeriesDataModule(
         train_fseries_params=FSeriesParams(smoothness=0.75), batch_size=512
     )
-    dl = dm.train_dataloader()
-    x = next(iter(dl))["x"]
-    # x = torch.arange(1000).float()
-    # x = torch.rand(1, 2048)
-    print(sample_entropy(x, subsample=10).mean())
 
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(fig, 111, nrows_ncols=(10, 1), axes_pad=0.05, share_all=False)

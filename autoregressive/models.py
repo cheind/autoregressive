@@ -9,14 +9,6 @@ _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
 
 
-@dataclasses.dataclass
-class TrainParams:
-    skip_incomplete_receptive_field: bool = True
-    unroll_steps: int = 1
-    lr: float = 1e-3
-    patience: int = 25
-
-
 class RegressionWaveNet(wave.WaveNetBase):
     def __init__(
         self,

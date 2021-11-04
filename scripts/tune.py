@@ -65,7 +65,6 @@ def train_tune(
             train_fseries_params=train_params,
             val_fseries_params=val_params,
         )
-    print(dm)
     model = models.RegressionWaveNet(**config)
 
     trainer = pl.Trainer(**kwargs)
@@ -74,11 +73,13 @@ def train_tune(
 
 def hypertune(args):
     config = {
-        "wave_channels": tune.choice([16, 32, 64]),
+        "wave_channels": 64,
         "num_blocks": tune.choice([1, 2]),
-        "num_layers_per_block": tune.choice([5, 9, 10]),
+        "num_layers_per_block": tune.choice([9, 10]),
         "lr": tune.choice([1e-3, 1e-4]),
-        "sched_patience": tune.choice([25, 50]),
+        "sched_patience": 25,
+        "loss_unroll_steps": tune.choice([1, 16, 32]),
+        "loss_margin": tune.choice([0.0, 0.1]),
     }
 
     scheduler = ASHAScheduler(

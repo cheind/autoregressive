@@ -93,7 +93,7 @@ class RegressionWaveNet(wave.WaveNetBase):
                 roll_y, roll_idx, y, margin=self.loss_margin
             )
         self.log("train_loss", loss)
-        return {"loss": loss, "train_loss": loss}
+        return {"loss": loss, "train_loss": loss.detach()}
 
     def validation_step(self, batch, batch_idx):
         x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)

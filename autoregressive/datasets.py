@@ -4,6 +4,7 @@ import dataclasses
 
 import torch
 import torch.utils.data
+import torch.nn.functional as F
 import pytorch_lightning as pl
 
 from .fseries import PI, fseries_amp_phase
@@ -163,11 +164,41 @@ class FSeriesDataModule(pl.LightningDataModule):
         return f"train_params: {self.train_fseries_params}\n val_params:{self.val_fseries_params}"
 
 
+def sample_entropy(
+    x: torch.Tensor, m: int = 2, r: float = None, stride: int = 1, subsample: int = 1
+):
+    # Batch-version based on https://en.wikipedia.org/wiki/Sample_entropy
+    x = torch.atleast_2d(x)
+    if r is None:
+        r = torch.std(x) * 0.2
+
+    def _get_coeff(wnd):
+        unf = x.unfold(1, wnd, stride)  # B,N,wnd
+        if subsample > 1:
+            unf = unf[:, ::subsample, :]
+        N = unf.shape[1]
+        d = torch.cdist(unf, unf, p=float("inf"))  # B,N,N
+        idx = torch.triu_indices(N, N, 1)  # take pairwise distances excl. diagonal
+        C = (d[:, idx[0], idx[1]] < r).sum(-1)  # B
+        return C
+
+    A = _get_coeff(m + 1)
+    B = _get_coeff(m)
+
+    return -torch.log(A / B)
+
+
 def main():
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import ImageGrid
 
-    dm = FSeriesDataModule()
+    dm = FSeriesDataModule(train_fseries_params=FSeriesParams(smoothness=0.75))
+
+    dl = torch.utils.data.DataLoader(dm.train_ds, batch_size=512)
+    x = next(iter(dl))["x"]
+    # x = torch.arange(1000).float()
+    # x = torch.rand(1, 2048)
+    print(sample_entropy(x, subsample=10).mean())
 
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(fig, 111, nrows_ncols=(10, 1), axes_pad=0.05, share_all=False)

@@ -109,7 +109,7 @@ def main():
         ax.set_ylim(-3, 3)
 
     handles, labels = ax.get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower right")
+    fig.legend(handles, labels, loc="upper left")
     fig.suptitle(f"Sample generation by {type(model).__name__}")
     fig.tight_layout()
     fig.savefig(f"tmp/generate_{type(model).__name__}.pdf")

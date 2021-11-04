@@ -1,22 +1,24 @@
 import itertools
 import logging
-from typing import Iterator, List, Optional, Protocol, Tuple, Sequence, overload
+from typing import Iterator, List, Protocol, Tuple, Sequence, overload
 
 import pytorch_lightning as pl
 import torch
-import torch.distributions as D
-import torch.distributions.constraints as constraints
 import torch.nn
 import torch.nn.functional as F
 import torch.nn.init
-
-from .utils import causal_pad
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
 
 FastQueues = List[torch.FloatTensor]
 WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
+
+
+def causal_pad(x: torch.Tensor, kernel_size: int, dilation: int) -> torch.Tensor:
+    """Performs a cause padding to avoid data leakage. Stride is assumed to be one."""
+    left_pad = (kernel_size - 1) * dilation
+    return F.pad(x, (left_pad, 0))
 
 
 def wave_init_weights(m):

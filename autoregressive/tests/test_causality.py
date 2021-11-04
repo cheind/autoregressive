@@ -1,7 +1,7 @@
 import torch
 import torch.nn
 
-from .. import utils, wave
+from .. import wave
 
 
 @torch.no_grad()
@@ -14,7 +14,7 @@ class CausalConv(torch.nn.Module):
         self.dilation = d
 
     def forward(self, x):
-        return self.conv(utils.causal_pad(x, 2, self.dilation))
+        return self.conv(wave.causal_pad(x, 2, self.dilation))
 
 
 def test_causal_padding():
@@ -60,7 +60,7 @@ class WaveNetSim(torch.nn.Module):
         )
 
     def forward(self, x):
-        x = utils.causal_pad(x, 2, self.receptive_field - 1)
+        x = wave.causal_pad(x, 2, self.receptive_field - 1)
         x = self.layers(x)
         return x
 

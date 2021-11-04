@@ -30,6 +30,7 @@ def train_tune(
     checkpoint_dir=None,
     num_epochs: int = 30,
     batch_size: int = 64,
+    overfit_batches: int = 0,
     gpu_per_trial: float = 1.0,
     data_config_path: str = None,
 ):
@@ -50,6 +51,7 @@ def train_tune(
         ),
         "callbacks": [tunecb, lrcb],
         "progress_bar_refresh_rate": 0,
+        "overfit_batches": overfit_batches,
     }
 
     if checkpoint_dir:
@@ -103,6 +105,7 @@ def hypertune(args):
             num_epochs=args.num_epochs,
             gpu_per_trial=args.gpu_per_trial,
             data_config_path=args.data_config,
+            overfit_batches=args.overfit_batches,
             batch_size=64,
         ),
         resources_per_trial={"cpu": 1, "gpu": args.gpu_per_trial},
@@ -127,6 +130,7 @@ def main():
     parser.add_argument("-num-samples", type=int, default=30)
     parser.add_argument("-gpu-per-trial", type=float, default=0.5)
     parser.add_argument("-num-epochs", type=int, default=30)
+    parser.add_argument("-overfit-batches", type=int, default=0)
     parser.add_argument("-experiment-name", default="tune_regression")
     parser.add_argument(
         "-data-config",

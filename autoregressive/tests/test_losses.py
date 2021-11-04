@@ -57,7 +57,7 @@ def test_rolling_nstep():
         max_rolls=2,
         random_rolls=True,
     )
-    assert torch.allclose(yidx, torch.tensor([10, 9]))
+    assert len(set(yidx.tolist()) & set([9, 10])) == 2
     _, _, yidx = losses.rolling_nstep(
         model,
         lambda model, obs, x: x,

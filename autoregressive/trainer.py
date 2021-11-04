@@ -100,13 +100,13 @@ def cli_main():
             return super().after_fit()
 
     ckpt = ModelCheckpoint(
-        monitor="val_loss",
+        monitor="val_loss_epoch",
         filename="wavenet-{epoch:02d}-{val_loss:.4f}",
         save_top_k=3,
     )
     lrm = LearningRateMonitor(logging_interval="step")
     es = EarlyStopping(
-        monitor="train_loss",
+        monitor="train_loss_epoch",
         check_on_train_epoch_end=True,
         min_delta=1e-4,
         patience=1,

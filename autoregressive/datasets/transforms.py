@@ -1,10 +1,11 @@
+__all__ = ["ApplyWithProb", "Noise", "Quantize", "Normalize", "chain_transforms"]
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Tuple, Sequence, TYPE_CHECKING
 
 import torch
 
 if TYPE_CHECKING:
-    from .datasets import FSeriesDataset
+    from .fseries import FSeriesDataset
 
 Sample = Dict[str, Any]
 

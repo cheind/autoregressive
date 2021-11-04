@@ -14,8 +14,8 @@ class RegressionWaveNet(wave.WaveNetBase):
         self,
         in_channels: int = 1,
         wave_channels: int = 64,
-        num_blocks: int = 4,
-        num_layers_per_block: int = 8,
+        num_blocks: int = 1,
+        num_layers_per_block: int = 9,
         skip_incomplete_receptive_field: bool = True,
         loss_unroll_steps: int = 1,
         loss_margin: float = 0.0,
@@ -70,7 +70,7 @@ class RegressionWaveNet(wave.WaveNetBase):
             loss = F.l1_loss(yhat[..., r:n], y[..., r:])
         else:
             x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
-            y: torch.Tensor = batch["xo"][..., 1:].unsqueeze(1)
+            y: torch.Tensor = batch["x"][..., 1:].unsqueeze(1)
             roll_y, _, roll_idx = losses.rolling_nstep(
                 self,
                 self.create_sampler(),
@@ -89,7 +89,7 @@ class RegressionWaveNet(wave.WaveNetBase):
 
     def validation_step(self, batch, batch_idx):
         x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
-        y: torch.Tensor = batch["xo"][..., 1:].unsqueeze(1)
+        y: torch.Tensor = batch["x"][..., 1:].unsqueeze(1)
 
         roll_y, _, roll_idx = losses.rolling_nstep(
             self,

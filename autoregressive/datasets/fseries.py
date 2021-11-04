@@ -1,13 +1,14 @@
+__all__ = ["FSeriesDataset", "FSeriesParams", "FSeriesDataModule"]
+
 from collections.abc import Sequence
 from typing import Any, Callable, Dict, Tuple, Union
 import dataclasses
 
 import torch
 import torch.utils.data
-import torch.nn.functional as F
 import pytorch_lightning as pl
 
-from .fseries import PI, fseries_amp_phase
+from .functional import PI, fseries_amp_phase
 
 Sample = Dict[str, Any]
 FloatOrFloatRange = Union[float, Tuple[float, float]]
@@ -178,7 +179,6 @@ def main():
     for ax, s in zip(grid, dm.train_ds):
         # ax.step(s["t"], s["x"])
         ax.plot(s["t"], s["x"])
-        ax.plot(s["t"], s["xo"])
         ax.set_ylim(-2, 2)
     plt.show()
 

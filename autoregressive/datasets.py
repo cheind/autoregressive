@@ -167,6 +167,35 @@ class FSeriesDataModule(pl.LightningDataModule):
 def sample_entropy(
     x: torch.Tensor, m: int = 2, r: float = None, stride: int = 1, subsample: int = 1
 ):
+    """Returns the batched sample entropy of the given time series.
+
+    Sample entropy is a measure of complexity of sequences that can be related
+    to predictability. Sample entropy (SE) is defined as the negative logarithm of
+    the following ratio:
+        SE(X,m,r) = -ln(C(X, m+1, r) / C(X, m, r))
+    where C(X,m,r) is the number of partial vectors of length m in sequence X whose
+    Chebyshev distance is less than r.
+
+    Note `C(X, m+1, r) <= C(X, m, r)` hence SE(X,m,r) is always >= 0.
+
+    Params
+    ------
+    x: (B,T) tensor
+        Batched time-series
+    m: int
+        Embedding length
+    r: float
+        Distance threshold, if None then will be computed as `0.2std(x)`
+    stride: int
+        Step between embedding vectors
+    subsample: int
+        Reduce the number of possible vectors of length m.
+
+    Returns
+    -------
+    SE: (B,) tensor
+        Sample entropy for each sequence
+    """
     # Batch-version based on https://en.wikipedia.org/wiki/Sample_entropy
     x = torch.atleast_2d(x)
     if r is None:

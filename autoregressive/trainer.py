@@ -101,7 +101,7 @@ def cli_main():
 
     ckpt = ModelCheckpoint(
         monitor="val_loss_epoch",
-        filename="wavenet-{epoch:02d}-{val_loss:.4f}",
+        filename="wavenet-{epoch:02d}-{val_loss_epoch:.4f}",
         save_top_k=3,
     )
     lrm = LearningRateMonitor(logging_interval="step")

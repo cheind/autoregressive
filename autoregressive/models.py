@@ -108,7 +108,9 @@ class RegressionWaveNet(wave.WaveNetBase):
             random_rolls=False,
             skip_partial=self.skip_incomplete_receptive_field,
         )
-        loss = losses.rolling_nstep_mae(roll_y, roll_idx, y, margin=self.loss_margin)
+        loss = losses.rolling_nstep_mae(
+            roll_y, roll_idx, y, margin=0.0
+        )  # don't apply margin here
         return {"val_loss": loss}
 
     def training_epoch_end(self, outputs) -> None:

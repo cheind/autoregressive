@@ -26,6 +26,7 @@ class RegressionWaveNet(wave.WaveNetBase):
         num_layers_per_block: int = 8,
         skip_incomplete_receptive_field: bool = True,
         loss_unroll_steps: int = 1,
+        loss_margin: float = 0.0,
         lr: float = 1e-3,
         sched_patience: int = 25,
     ) -> None:
@@ -39,6 +40,7 @@ class RegressionWaveNet(wave.WaveNetBase):
         )
         self.skip_incomplete_receptive_field = skip_incomplete_receptive_field
         self.loss_unroll_steps = loss_unroll_steps
+        self.loss_margin = loss_margin
         self.lr = lr
         self.sched_patience = sched_patience
         super().save_hyperparameters()
@@ -87,7 +89,9 @@ class RegressionWaveNet(wave.WaveNetBase):
                 skip_partial=self.skip_incomplete_receptive_field,
                 detach_sample=False,
             )
-            loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
+            loss = losses.rolling_nstep_mae(
+                roll_y, roll_idx, y, margin=self.loss_margin
+            )
         self.log("train_loss", loss)
         return {"loss": loss, "train_loss": loss}
 
@@ -104,7 +108,7 @@ class RegressionWaveNet(wave.WaveNetBase):
             random_rolls=False,
             skip_partial=self.skip_incomplete_receptive_field,
         )
-        loss = losses.rolling_nstep_mae(roll_y, roll_idx, y)
+        loss = losses.rolling_nstep_mae(roll_y, roll_idx, y, margin=self.loss_margin)
         return {"val_loss": loss}
 
     def training_epoch_end(self, outputs) -> None:

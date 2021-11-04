@@ -46,12 +46,14 @@ def rolling_nstep(
 
 
 def rolling_nstep_mae(
-    roll_y: torch.Tensor, roll_idx: torch.Tensor, y: torch.Tensor
+    roll_y: torch.Tensor, roll_idx: torch.Tensor, y: torch.Tensor, margin: float = 0.0
 ) -> float:
     G = roll_y.shape[-1]  # number of elements predicted in roll
     sum_loss = 0.0
     num_pred = 0
     for yhat, idx in zip(roll_y, roll_idx):
-        sum_loss = sum_loss + F.l1_loss(yhat, y[..., idx : idx + G], reduction="sum")
+        ae = F.l1_loss(yhat, y[..., idx : idx + G], reduction="none")
+        th = torch.maximum(ae.new_zeros(1).expand_as(ae), ae - margin)
+        sum_loss = sum_loss + th.sum()
         num_pred = num_pred + yhat.numel()
     return sum_loss / num_pred

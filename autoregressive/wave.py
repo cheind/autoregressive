@@ -269,9 +269,9 @@ def generate(
         obs = history[..., :t]
         x = model.forward(obs)
         s = sampler(model, obs, x[..., -1:])  # yield sample for t+1 only
+        yield s, x[..., -1:]
         if detach_sample:
             s = s.detach()
-        yield s, x[..., -1:]
         roll = int(t == R)
         history = history.roll(-roll, -1)  # no-op as long as history is not full
         t = min(t + 1, R)
@@ -308,9 +308,9 @@ def generate_fast(
     while True:
         x, queues = model.forward_one(obs, queues)
         s = sampler(model, obs, x)
+        yield s, x
         if detach_sample:
             s = s.detach()
-        yield s, x
         obs = s
 
 

@@ -51,10 +51,26 @@ def test_generators():
     assert yslow_samples.shape == (1, 1, 60)
     assert torch.allclose(yslow_samples, yfast_samples, atol=1e-4)
 
+    # Next, similar as above but with more inputs (partial receptive field)
+    gslow = wave.generate(net, x[..., :3], sampler=identity_sampler)
+    gfast = wave.generate_fast(net, x[..., :3], sampler=identity_sampler)
+    yslow_samples, _ = wave.slice_generator(gslow, 60)
+    yfast_samples, _ = wave.slice_generator(gfast, 60)
+    assert yslow_samples.shape == (1, 1, 60)
+    assert torch.allclose(yslow_samples, yfast_samples, atol=1e-4)
+
+    # Next, similar as above but with all inputs
+    gslow = wave.generate(net, x, sampler=identity_sampler)
+    gfast = wave.generate_fast(net, x, sampler=identity_sampler)
+    yslow_samples, _ = wave.slice_generator(gslow, 60)
+    yfast_samples, _ = wave.slice_generator(gfast, 60)
+    assert yslow_samples.shape == (1, 1, 60)
+    assert torch.allclose(yslow_samples, yfast_samples, atol=1e-4)
+
     # Finally, we check verify that providing pre-computed layerinputs work
     # as expected.
     gslow = wave.generate(net, x, sampler=identity_sampler)
-    _, layer_inputs, _ = net.encode(x)
+    _, layer_inputs, _ = net.encode(x, strip_padding=False)
     gfast = wave.generate_fast(
         net, x, sampler=identity_sampler, layer_inputs=layer_inputs
     )

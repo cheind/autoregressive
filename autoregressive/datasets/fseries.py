@@ -8,6 +8,7 @@ import torch
 import torch.utils.data
 import pytorch_lightning as pl
 
+from .common import SeriesDataset
 from .functional import PI, fseries_amp_phase
 
 Sample = Dict[str, Any]
@@ -15,7 +16,7 @@ FloatOrFloatRange = Union[float, Tuple[float, float]]
 IntOrIntRange = Union[int, Tuple[int, int]]
 
 
-class FSeriesDataset(torch.utils.data.Dataset):
+class FSeriesDataset(SeriesDataset):
     """A randomized Fourier series dataset."""
 
     def __init__(
@@ -143,6 +144,7 @@ class FSeriesDataModule(pl.LightningDataModule):
         self.val_ds = FSeriesDataset(**dataclasses.asdict(val_fseries_params))
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.dt = self.train_ds.dt
         self.save_hyperparameters()
 
     def train_dataloader(self):

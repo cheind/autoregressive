@@ -1,13 +1,11 @@
 __all__ = ["ApplyWithProb", "Noise", "Quantize", "Normalize", "chain_transforms"]
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Tuple, Sequence, TYPE_CHECKING
+from typing import Tuple, Sequence
 
 import torch
 
-if TYPE_CHECKING:
-    from .fseries import FSeriesDataset
-
-Sample = Dict[str, Any]
+from .common import Sample
+from .functional import normalize_series
 
 
 class ApplyWithProb(ABC):
@@ -56,39 +54,30 @@ class Quantize:
 
 
 class Normalize:
-    """Normalize to [0,1] range on a per-sample basis"""
+    """Normalize series values to given target range.
 
-    def __init__(self, lu_range: Tuple[float, float] = None) -> None:
-        if lu_range is not None:
-            self.cmin = lu_range[0]
-            self.cmax = lu_range[1]
-        self.cmin, self.cmax = None, None
+    Params
+    ------
+    source_range: (float,float)
+        When provided, will be used for every series. Otherwise
+        source range will be computed on a per sample basis.
+    target_range: (float,float)
+        Range of output
+    """
+
+    def __init__(
+        self,
+        source_range: Tuple[float, float] = None,
+        target_range: Tuple[float, float] = (0.0, 1.0),
+    ) -> None:
+        self.source_range = source_range
+        self.target_range = target_range
 
     def __call__(self, sample: Sample) -> Sample:
-        sample["x"] = self.apply(sample["x"])
-        return sample
-
-    def apply(self, x: torch.Tensor):
-        if self.cmin is None:
-            cmin, cmax = x.min(), x.max()
-        else:
-            cmin, cmax = self.cmin, self.cmax
-
-        x = (x - cmin) / (cmax - cmin)
-        x = torch.clamp(x, cmin, cmax)
-        return x
-
-    @staticmethod
-    def find_range(*ds: "FSeriesDataset") -> Tuple[float, float]:
-        dl = torch.utils.data.DataLoader(
-            torch.utils.data.ConcatDataset(ds), batch_size=256, num_workers=4
+        self.sample["x"] = normalize_series(
+            self.sample["x"], self.source_range, self.target_range
         )
-        fmax = torch.finfo(torch.float32).max
-        lower, upper = fmax, -fmax
-        for b in dl:
-            lower = min(lower, b["x"].min())
-            upper = max(upper, b["x"].max())
-        return lower, upper
+        return sample
 
 
 def chain_transforms(*args: Sequence[Sample]):

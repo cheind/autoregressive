@@ -5,10 +5,12 @@ from typing import Tuple
 
 import matplotlib.pyplot as plt
 import torch
+import pytorch_lightning as pl
 from mpl_toolkits.axes_grid1 import ImageGrid
 from pytorch_lightning.utilities.cli import LightningCLI
 
-from .. import datasets, wave
+
+from autoregressive import wave
 
 
 def geometry(arg: str) -> Tuple[int, int]:
@@ -37,8 +39,9 @@ class GenerateLightningCLI(InstantiateOnlyLightningCLI):
 def main():
     cli = GenerateLightningCLI(
         wave.WaveNetBase,
-        datasets.FSeriesDataModule,
+        pl.LightningDataModule,
         subclass_mode_model=True,
+        subclass_mode_data=True,
     )
     cfg = cli.config
     model: wave.WaveNetBase = cli.model
@@ -51,9 +54,9 @@ def main():
     num_curves = curve_layout[0] * curve_layout[1]
 
     dm = cli.datamodule
-    ds: datasets.FSeriesDataset = dm.val_ds
+    ds = dm.train_ds
     # ds.transform = datasets.Noise(scale=1e-1, p=1.0)
-    S = min(model.receptive_field + cfg["shift"], ds.num_tsamples)
+    S = min(model.receptive_field + cfg["shift"], ds[0]["x"].shape[-1])
 
     fig = plt.figure()
     grid = ImageGrid(
@@ -63,6 +66,7 @@ def main():
         axes_pad=0.05,
         share_all=True,
         label_mode="1",
+        aspect=False,
     )
     grid[0].get_yaxis().set_ticks([])
     grid[0].get_xaxis().set_ticks([])
@@ -93,9 +97,7 @@ def main():
     t0 = time.time()
     trajs, _ = wave.slice_generator(g, stop=cfg["num_steps"])  # (B,1,T)
     trajs = trajs.squeeze(1).cpu()
-    dt = ds.dt
-    tn = torch.arange(S, S + cfg["num_steps"], 1) * dt
-
+    tn = torch.arange(S, S + cfg["num_steps"], 1) * dm.dt
     print(f"Generation took {(time.time()-t0):.3f} secs")
 
     # Plot
@@ -111,7 +113,7 @@ def main():
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper left")
     fig.suptitle(f"Sample generation by {type(model).__name__}")
-    fig.tight_layout()
+    # fig.tight_layout()
     fig.savefig(f"tmp/generate_{type(model).__name__}.pdf")
     plt.show()
 

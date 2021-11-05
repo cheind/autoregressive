@@ -60,15 +60,17 @@ class RegressionWaveNet(wave.WaveNetBase):
         }
 
     def training_step(self, batch, batch_idx):
-        if self.loss_unroll_steps == 1:
+        def _base_loss():
             x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
-            y: torch.Tensor = batch["xo"][..., 1:]
+            y: torch.Tensor = batch["x"][..., 1:]
             y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
             n = y.shape[-1]
             yhat = self(x)
             r = self.receptive_field if self.skip_incomplete_receptive_field else 0
             loss = F.l1_loss(yhat[..., r:n], y[..., r:])
-        else:
+            return loss
+
+        def _unroll_loss():
             x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
             y: torch.Tensor = batch["x"][..., 1:].unsqueeze(1)
             roll_y, _, roll_idx = losses.rolling_nstep(
@@ -84,6 +86,12 @@ class RegressionWaveNet(wave.WaveNetBase):
             loss = losses.rolling_nstep_mae(
                 roll_y, roll_idx, y, margin=self.loss_margin
             )
+            return loss
+
+        loss = _base_loss()
+        if self.loss_unroll_steps > 1:
+            loss = loss + 0.1 * _unroll_loss()
+
         self.log("train_loss", loss)
         return {"loss": loss, "train_loss": loss.detach()}
 

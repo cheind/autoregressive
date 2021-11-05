@@ -77,8 +77,9 @@ class AEPHourlyDataModule(pl.LightningDataModule):
     def __init__(
         self,
         data_path: Union[str, Path] = "./AEP_hourly.csv",
-        chunk_size: int = 8760,  # 365*24, i.e roughly a year
+        chunk_size: int = 8760 // 2,  # 365*24, i.e roughly a half-year
         normalize: bool = True,
+        repeat_train: int = 100,
         batch_size: int = 64,
         num_workers: int = 0,
     ):
@@ -93,7 +94,11 @@ class AEPHourlyDataModule(pl.LightningDataModule):
         self.train_ds, self.val_ds, self.test_ds = common.split_ds_fractional(
             self.ds, [0.6, 0.2, 0.2]
         )
-        self.train_ds = torch.utils.data.ConcatDataset([self.train_ds] * 100)
+        if repeat_train > 1:
+            self.train_ds = torch.utils.data.ConcatDataset(
+                [self.train_ds] * repeat_train
+            )
+
         self.dt = 1.0
 
     def train_dataloader(self):

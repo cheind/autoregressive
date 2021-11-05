@@ -1,4 +1,10 @@
-__all__ = ["FSeriesDataset", "FSeriesParams", "FSeriesDataModule"]
+__all__ = [
+    "FSeriesDataset",
+    "FSeriesParams",
+    "FSeriesDataModule",
+    "BentLinesDataset",
+    "BentLinesDataModule",
+]
 
 from collections.abc import Sequence
 from typing import Any, Callable, Dict, Tuple, Union
@@ -199,7 +205,7 @@ class BentLinesDataset(SeriesDataset):
         return self.params.dt
 
     def __len__(self):
-        return self.num_curves
+        return self.params.num_curves
 
     def __getitem__(self, index) -> Sample:
         p = self.curve_params[index]
@@ -232,7 +238,7 @@ class BentLinesDataModule(pl.LightningDataModule):
     def __init__(
         self,
         train_params: BentLinesParams = BentLinesParams(),
-        val_params: BentLinesParams = BentLinesParams(num_curves=16),
+        val_params: BentLinesParams = BentLinesParams(num_curves=256),
         batch_size: int = 64,
         num_workers: int = 0,
     ):

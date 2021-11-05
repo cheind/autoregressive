@@ -1,4 +1,4 @@
-__all__ = ["AEPHourlyDataset", "AEPHourlyDataModule"]
+__all__ = ["AEPHourlyDataset", "AEPHourlyDataModule", "ETTDataset", "ETTDataModule"]
 import io
 from pathlib import Path
 from typing import Union
@@ -69,9 +69,6 @@ class AEPHourlyDataset(torch.utils.data.Dataset):
     def __getitem__(self, index) -> Sample:
         return {"x": self.data[index], "t": torch.arange(0, self.data.shape[-1])}
 
-        print(self.data.shape)
-        # https://discuss.pytorch.org/t/how-to-split-dataset-into-test-and-validation-sets/33987/5
-
 
 class AEPHourlyDataModule(pl.LightningDataModule):
     def __init__(
@@ -99,7 +96,83 @@ class AEPHourlyDataModule(pl.LightningDataModule):
                 [self.train_ds] * repeat_train
             )
 
-        self.dt = 1.0
+        self.dt = self.ds.dt
+
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.val_ds,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+        )
+
+
+class ETTDataset(torch.utils.data.Dataset):
+    # https://github.com/zhouhaoyi/ETDataset
+    # https://arxiv.org/abs/2012.07436
+    def __init__(
+        self,
+        data_path: Union[str, Path],
+        normalize: bool = True,
+        chunk_size: int = None,
+    ) -> None:
+        data_path = Path(data_path)
+        assert data_path.is_file()
+
+        data = np.genfromtxt(
+            data_path, skip_header=1, delimiter=",", usecols=(-1,), dtype=np.float32
+        )
+        data = torch.from_numpy(data)
+        self.mean, self.std = functional.find_series_mean_std([data])
+        data = functional.standardize_series(data, self.mean, self.std)
+        if chunk_size is None:
+            chunk_size = len(data)
+        self.data = data.unfold(0, chunk_size, chunk_size)
+        self.dt = 1
+
+    def __len__(self):
+        return self.data.shape[0]
+
+    def __getitem__(self, index) -> Sample:
+        return {"x": self.data[index], "t": torch.arange(0, self.data.shape[-1])}
+
+
+class ETTDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        data_path: Union[str, Path] = "./ETTh1.csv",
+        chunk_size: int = 8760 // 2,  # 365*24//2, i.e roughly a half-year
+        normalize: bool = True,
+        repeat_train: int = 100,
+        batch_size: int = 64,
+        num_workers: int = 0,
+    ):
+        super().__init__()
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.save_hyperparameters()
+
+        self.ds = ETTDataset(
+            data_path=data_path, normalize=normalize, chunk_size=chunk_size
+        )
+        #  The train/val/test is 12/4/4 months.
+        self.train_ds, self.val_ds, self.test_ds = common.split_ds_fractional(
+            self.ds, [0.6, 0.2, 0.2]
+        )
+        if repeat_train > 1:
+            self.train_ds = torch.utils.data.ConcatDataset(
+                [self.train_ds] * repeat_train
+            )
+
+        self.dt = self.ds.dt
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
@@ -121,8 +194,10 @@ class AEPHourlyDataModule(pl.LightningDataModule):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
-    from .. import measures
+    ds = ETTDataset("ETTh2.csv", normalize=False)
+    plt.plot(ds[0]["t"], ds[0]["x"])
+    plt.show()
 
-    dm = AEPHourlyDataModule(r"C:\data\AEP_hourly.csv", normalize=True, batch_size=64)
-    b = next(iter(dm.val_dataloader()))
-    print(measures.sample_entropy(b["x"]).mean())
+    # dm = AEPHourlyDataModule(r"C:\data\AEP_hourly.csv", normalize=True, batch_size=64)
+    # b = next(iter(dm.val_dataloader()))
+    # print(measures.sample_entropy(b["x"]).mean())

@@ -18,6 +18,7 @@ class RegressionWaveNet(wave.WaveNetBase):
         num_layers_per_block: int = 9,
         skip_incomplete_receptive_field: bool = True,
         loss_unroll_steps: int = 1,
+        val_unroll_steps: int = 64,
         loss_margin: float = 0.0,
         lr: float = 1e-3,
         sched_patience: int = 25,
@@ -33,6 +34,7 @@ class RegressionWaveNet(wave.WaveNetBase):
         self.skip_incomplete_receptive_field = skip_incomplete_receptive_field
         self.loss_unroll_steps = loss_unroll_steps
         self.loss_margin = loss_margin
+        self.val_unroll_steps = val_unroll_steps
         self.lr = lr
         self.sched_patience = sched_patience
         super().save_hyperparameters()
@@ -103,7 +105,7 @@ class RegressionWaveNet(wave.WaveNetBase):
             self,
             self.create_sampler(),
             x,
-            num_generate=64,
+            num_generate=self.val_unroll_steps,
             max_rolls=8,
             random_rolls=False,
             skip_partial=self.skip_incomplete_receptive_field,

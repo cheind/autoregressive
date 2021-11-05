@@ -167,21 +167,124 @@ class FSeriesDataModule(pl.LightningDataModule):
         return f"train_params: {self.train_fseries_params}\n val_params:{self.val_fseries_params}"
 
 
+@dataclasses.dataclass
+class BentLinesParams:
+    num_curves: int = 2048
+    num_tsamples: int = 32
+    dt: float = 1.0
+    seed: int = None
+    include_params: bool = False
+
+
+class BentLinesDataset(SeriesDataset):
+    """Two straight lines with random slopes, connected to each other at a random location
+    https://fleuret.org/dlc/materials/dlc-handout-10-1-autoregression.pdf
+    """
+
+    def __init__(
+        self,
+        params: BentLinesParams = BentLinesParams(),
+        transform: Callable[[Sample], Sample] = None,
+    ) -> None:
+        self.params = params
+        self.transform = transform
+        if params.seed is None:
+            rng = torch.default_generator
+        else:
+            rng = torch.Generator().manual_seed(params.seed)
+        self.curve_params = [self._sample_params(rng) for _ in range(params.num_curves)]
+
+    @property
+    def dt(self):
+        return self.params.dt
+
+    def __len__(self):
+        return self.num_curves
+
+    def __getitem__(self, index) -> Sample:
+        p = self.curve_params[index]
+        t = torch.arange(0, self.params.num_tsamples) * self.dt
+        tk = p["tkink"]
+        x1 = t[:tk] * p["slopes"][0] + p["d"]
+        x2 = (t[tk:] - t[tk]) * p["slopes"][1] + p["d"]
+        x = torch.cat((x1, x2))
+        sample = {"x": x, "xo": x.clone(), "t": t}
+        if self.params.include_params:
+            sample["p"] = p
+        if self.transform is not None:
+            sample = self.transform(sample)
+        return sample
+
+    def _sample_params(self, g: torch.Generator) -> Dict[str, Any]:
+        """Returns sampled parameters."""
+
+        def uniform(r, n: int):
+            return (r[1] - r[0]) * torch.rand(n, generator=g) + r[0]
+
+        tkink = torch.randint(0, self.params.num_tsamples, (1,), generator=g)
+        slopes = uniform((-1.0, 1.0), 2)
+        d = 0.0
+
+        return {"tkink": tkink, "slopes": slopes, "d": d}
+
+
+class BentLinesDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        train_params: BentLinesParams = BentLinesParams(),
+        val_params: BentLinesParams = BentLinesParams(num_curves=16),
+        batch_size: int = 64,
+        num_workers: int = 0,
+    ):
+        super().__init__()
+        self.train__params = train_params
+        self.val_params = val_params
+        self.train_ds = BentLinesDataset(train_params)
+        self.val_ds = BentLinesDataset(val_params)
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.dt = self.train_ds.dt
+        self.save_hyperparameters()
+
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.val_ds,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+        )
+
+    def __str__(self) -> str:
+        return f"BentLinesDataModule(train_params={self.train__params}, val_params={self.val_params})"
+
+
 def main():
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1 import ImageGrid
 
-    dm = FSeriesDataModule(
-        train_fseries_params=FSeriesParams(smoothness=0.75), batch_size=512
-    )
+    # dm = FSeriesDataModule(
+    #     train_fseries_params=FSeriesParams(smoothness=0.75), batch_size=512
+    # )
+
+    dm = BentLinesDataModule()
 
     fig = plt.figure(figsize=(8.0, 8.0))
-    grid = ImageGrid(fig, 111, nrows_ncols=(10, 1), axes_pad=0.05, share_all=False)
+    grid = ImageGrid(
+        fig, 111, nrows_ncols=(5, 5), axes_pad=0.05, share_all=False, aspect=False
+    )
 
     for ax, s in zip(grid, dm.train_ds):
         # ax.step(s["t"], s["x"])
-        ax.plot(s["t"], s["x"])
-        ax.set_ylim(-2, 2)
+        ax.scatter(s["t"], s["x"])
+        ax.set_ylim(-30, 30)
     plt.show()
 
 

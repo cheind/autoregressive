@@ -110,7 +110,7 @@ def cli_main():
         monitor="train_loss_epoch",
         check_on_train_epoch_end=True,
         min_delta=1e-4,
-        patience=1,
+        patience=2,
         verbose=True,
     )
 

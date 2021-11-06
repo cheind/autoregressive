@@ -14,10 +14,11 @@ class RegressionWaveNet(wave.WaveNetBase):
         self,
         in_channels: int = 1,
         wave_channels: int = 64,
-        num_blocks: int = 4,
-        num_layers_per_block: int = 8,
+        num_blocks: int = 1,
+        num_layers_per_block: int = 9,
         skip_incomplete_receptive_field: bool = True,
         loss_unroll_steps: int = 1,
+        val_unroll_steps: int = 64,
         loss_margin: float = 0.0,
         lr: float = 1e-3,
         sched_patience: int = 25,
@@ -33,6 +34,7 @@ class RegressionWaveNet(wave.WaveNetBase):
         self.skip_incomplete_receptive_field = skip_incomplete_receptive_field
         self.loss_unroll_steps = loss_unroll_steps
         self.loss_margin = loss_margin
+        self.val_unroll_steps = val_unroll_steps
         self.lr = lr
         self.sched_patience = sched_patience
         super().save_hyperparameters()
@@ -60,17 +62,19 @@ class RegressionWaveNet(wave.WaveNetBase):
         }
 
     def training_step(self, batch, batch_idx):
-        if self.loss_unroll_steps == 1:
+        def _base_loss():
             x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
-            y: torch.Tensor = batch["xo"][..., 1:]
+            y: torch.Tensor = batch["x"][..., 1:]
             y = y.unfold(-1, self.out_channels, 1).permute(0, 2, 1)
             n = y.shape[-1]
             yhat = self(x)
             r = self.receptive_field if self.skip_incomplete_receptive_field else 0
             loss = F.l1_loss(yhat[..., r:n], y[..., r:])
-        else:
+            return loss
+
+        def _unroll_loss():
             x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
-            y: torch.Tensor = batch["xo"][..., 1:].unsqueeze(1)
+            y: torch.Tensor = batch["x"][..., 1:].unsqueeze(1)
             roll_y, _, roll_idx = losses.rolling_nstep(
                 self,
                 self.create_sampler(),
@@ -84,18 +88,24 @@ class RegressionWaveNet(wave.WaveNetBase):
             loss = losses.rolling_nstep_mae(
                 roll_y, roll_idx, y, margin=self.loss_margin
             )
+            return loss
+
+        loss = _base_loss()
+        if self.loss_unroll_steps > 1:
+            loss = loss + 0.1 * _unroll_loss()
+
         self.log("train_loss", loss)
         return {"loss": loss, "train_loss": loss.detach()}
 
     def validation_step(self, batch, batch_idx):
         x: torch.Tensor = batch["x"][..., :-1].unsqueeze(1)
-        y: torch.Tensor = batch["xo"][..., 1:].unsqueeze(1)
+        y: torch.Tensor = batch["x"][..., 1:].unsqueeze(1)
 
         roll_y, _, roll_idx = losses.rolling_nstep(
             self,
             self.create_sampler(),
             x,
-            num_generate=64,
+            num_generate=self.val_unroll_steps,
             max_rolls=8,
             random_rolls=False,
             skip_partial=self.skip_incomplete_receptive_field,

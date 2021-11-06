@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 
-from .. import measures, datasets, transforms
+from .. import measures, datasets
 
 
 def test_sample_entropy():
@@ -29,7 +29,9 @@ def test_sample_entropy():
     se_var_p = measures.sample_entropy(b["x"]).mean()
 
     ds = datasets.FSeriesDataset(
-        period_range=(5, 10), seed=123, transform=transforms.Noise(scale=1e-1, p=1)
+        period_range=(5, 10),
+        seed=123,
+        transform=datasets.transforms.Noise(scale=1e-1, p=1),
     )
     b = next(iter(DataLoader(ds, batch_size=512)))
     se_var_p_noise = measures.sample_entropy(b["x"]).mean()

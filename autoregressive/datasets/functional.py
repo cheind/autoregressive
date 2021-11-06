@@ -1,3 +1,13 @@
+__all__ = [
+    "fseries_amp_phase",
+    "find_series_range",
+    "find_series_mean_std",
+    "normalize_series",
+    "normalize_series_inv",
+    "standardize_series",
+    "standardize_series_inv",
+]
+from typing import Tuple, Iterable
 import numpy as np
 import torch
 
@@ -50,6 +60,55 @@ def fseries_amp_phase(
     f0 = 1 / period
     arg = 2 * PI * f0 * n * t + phase  # (B,N,T)
     return bias * 0.5 + (a @ torch.cos(arg)).squeeze(1)
+
+
+def find_series_range(series: Iterable[torch.Tensor]) -> Tuple[float, float]:
+    """Returns minimum and maximum value of given series."""
+    fmax = torch.finfo(torch.float32).max
+    lower, upper = fmax, -fmax
+    for s in series:
+        lower = min(lower, s.min().item())
+        upper = max(upper, s.max().item())
+    return lower, upper
+
+
+def find_series_mean_std(series: Iterable[torch.Tensor]) -> Tuple[float, float]:
+    """Returns mean, std of series"""
+    if not isinstance(series, torch.Tensor):
+        series = torch.stack(series, 0)
+    return series.mean(), series.std()
+
+
+def normalize_series(
+    x: torch.Tensor,
+    source_range: Tuple[float, float] = None,
+    target_range: Tuple[float, float] = (0.0, 1.0),
+) -> torch.Tensor:
+    """(Batch) normalize a given series."""
+    if source_range is None:
+        source_range = (x.min().detach().item(), x.max().detach().item())
+    xn = (x - source_range[0]) / (source_range[1] - source_range[0])
+    xt = (target_range[1] - target_range[0]) * xn + target_range[0]
+    return torch.clamp(xt, target_range[0], target_range[1])
+
+
+def normalize_series_inv(
+    x: torch.Tensor,
+    source_range: Tuple[float, float] = None,
+    target_range: Tuple[float, float] = (0.0, 1.0),
+) -> torch.Tensor:
+    """(Batch) un-normalize a given series."""
+    return normalize_series(x, target_range, source_range)
+
+
+def standardize_series(x: torch.Tensor, mean: float, std: float) -> torch.Tensor:
+    """(Batch) standardize a given series."""
+    return (x - mean) / std
+
+
+def standardize_series_inv(x: torch.Tensor, mean: float, std: float) -> torch.Tensor:
+    """(Batch) inverse standardize of time series."""
+    return x * std + mean
 
 
 def square_wave():

@@ -165,7 +165,7 @@ class WaveNetBase(pl.LightningModule):
         self.apply(wave_init_weights)
         _logger.info(f"Receptive field of WaveNet {self.receptive_field}")
 
-    def encode(self, x):
+    def encode(self, x, strip_padding: bool = True):
         skips = []
         layer_inputs = []
         x = causal_pad(x, 2, self.receptive_field - 1)
@@ -174,7 +174,9 @@ class WaveNetBase(pl.LightningModule):
             layer_inputs.append(x)
             x, skip = layer(x, fast=False)
             skips.append(skip)
-        return x, self._strip_layer_input_padding(layer_inputs), skips
+        if strip_padding:
+            layer_inputs = self._strip_layer_input_padding(layer_inputs)
+        return x, layer_inputs, skips
 
     def encode_one(self, x, queues: FastQueues):
         skips = []
@@ -225,6 +227,9 @@ class WaveNetBase(pl.LightningModule):
         queues = []
         for layer, layer_input in zip(self.wave_layers, layer_inputs):
             layer: WaveNetLayer
+            assert (
+                layer_input.shape[-1] >= layer.dilation
+            )  # you might have stripped layer inputs
             q = layer_input[..., -layer.dilation :]
             queues.append(q)
         return queues
@@ -261,7 +266,7 @@ def generate(
     # We need to track up to the last n samples,
     # where n equals the receptive field of the model
     R = model.receptive_field
-    history = initial_obs.new_empty((B, C, R))
+    history = initial_obs.new_zeros((B, C, R))
     t = min(R, T)
     history[..., :t] = initial_obs[..., -t:]
 
@@ -298,7 +303,7 @@ def generate_fast(
     else:
         if layer_inputs is None:
             _, layer_inputs, _ = model.encode(
-                initial_obs[..., :-1]
+                initial_obs[..., :-1], strip_padding=False
             )  # TODO we should encode only necessary inputs
         else:
             layer_inputs = [inp[..., :-1] for inp in layer_inputs]

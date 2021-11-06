@@ -1,5 +1,6 @@
 import logging
 
+import pytorch_lightning as pl
 from pytorch_lightning.utilities.cli import LightningCLI
 from pytorch_lightning.callbacks import (
     LearningRateMonitor,
@@ -109,14 +110,15 @@ def cli_main():
         monitor="train_loss_epoch",
         check_on_train_epoch_end=True,
         min_delta=1e-4,
-        patience=1,
+        patience=2,
         verbose=True,
     )
 
     _ = MyLightningCLI(
         wave.WaveNetBase,
-        datasets.FSeriesDataModule,
+        pl.LightningDataModule,
         subclass_mode_model=True,
+        subclass_mode_data=True,
         # seed_everything_default=1234,
         # run=False,
         save_config_overwrite=True,
@@ -131,7 +133,8 @@ def cli_main():
 
 if __name__ == "__main__":
     cli_main()
-    # python -m autoregressive.trainer --model autoregressive.models.RegressionWaveNet --print_config > config.yaml
+    # python -m autoregressive.trainer --model autoregressive.models.RegressionWaveNet --data autoregressive.datasets.FSeriesDataModule --print_config > config.yaml
+    # python -m autoregressive.trainer --model autoregressive.models.RegressionWaveNet --data autoregressive.datasets.AEPHourlyDataModule --print_config > config.yaml
     # python -m autoregressive.trainer --model autoregressive.variants.QuantizedWaveNet --data.num_bins 32 --print_config > config.yaml
     # python -m autoregressive.trainer --model autoregressive.trainer.LitBimodalWaveNet --print_config > bimodal.yaml
     # python -m autoregressive.trainer --config config.yaml

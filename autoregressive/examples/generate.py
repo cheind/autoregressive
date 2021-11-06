@@ -54,7 +54,7 @@ def main():
     num_curves = curve_layout[0] * curve_layout[1]
 
     dm = cli.datamodule
-    ds = dm.train_ds
+    ds = dm.val_ds
     # ds.transform = datasets.Noise(scale=1e-1, p=1.0)
     S = min(model.receptive_field + cfg["shift"], ds[0]["x"].shape[-1])
 
@@ -108,7 +108,7 @@ def main():
             # Note, above we step with num_curves to get all trajectories
             # for this axis. Related to repeat statement above.
             ax.plot(tn, xn, label="generated" if tidx == 0 else "")
-        ax.set_ylim(-3, 3)
+        # ax.set_ylim(-3, 3)
 
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper left")

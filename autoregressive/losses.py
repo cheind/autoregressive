@@ -57,3 +57,16 @@ def rolling_nstep_mae(
         sum_loss = sum_loss + th.sum()
         num_pred = num_pred + yhat.numel()
     return sum_loss / num_pred
+
+
+def rolling_nstep_ce(
+    roll_y: torch.Tensor, roll_idx: torch.Tensor, y: torch.Tensor
+) -> float:
+    G = roll_y.shape[-1]  # number of elements predicted in roll
+    sum_loss = 0.0
+    num_pred = 0
+    for yhat, idx in zip(roll_y, roll_idx):
+        ce = F.cross_entropy(yhat, y[..., idx : idx + G], reduction="sum")
+        sum_loss = sum_loss + ce
+        num_pred = num_pred + yhat.numel()
+    return sum_loss / num_pred

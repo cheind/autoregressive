@@ -1,12 +1,16 @@
 import itertools
 import logging
-from typing import Iterator, List, Protocol, Tuple, Sequence, overload
+from typing import Iterator, List, Protocol, Tuple, Sequence
+import dataclasses
 
 import pytorch_lightning as pl
 import torch
 import torch.nn
 import torch.nn.functional as F
+import torch.distributions as D
 import torch.nn.init
+
+from . import losses
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -29,28 +33,10 @@ def wave_init_weights(m):
             torch.nn.init.constant_(m.bias, 0.0)
 
 
-@overload
-def compute_receptive_field(dilation_seq: Sequence[int], kernel_size: int) -> int:
-    ...
-
-
-@overload
-def compute_receptive_field(
-    num_blocks: int, num_layers_per_block: int, kernel_size: int
-) -> int:
-    ...
-
-
 def compute_receptive_field(
     dilation_seq: Sequence[int] = None,
-    num_blocks: int = None,
-    num_layers_per_block: int = None,
     kernel_size: int = 2,
 ) -> int:
-    if dilation_seq is None:
-        dilation_seq = [
-            2 ** i for _ in range(num_blocks) for i in range(num_layers_per_block)
-        ]
     return (kernel_size - 1) * sum(dilation_seq) + 1
 
 
@@ -94,76 +80,69 @@ class WaveNetLayer(torch.nn.Module):
         return out, skip
 
 
-class WaveNetHead(torch.nn.Module):
-    def __init__(
-        self, wave_channels: int, out_channels: int, use_encoded: bool = False
-    ):
+class WaveNetLogitsHead(torch.nn.Module):
+    def __init__(self, wave_channels: int, out_channels: int):
         super().__init__()
-        self.use_encoded = use_encoded
         self.transform = torch.nn.Sequential(
             torch.nn.ReLU(),  # note, we perform non-lin first (i.e on sum of skips)
             torch.nn.Conv1d(
                 wave_channels, wave_channels * 2, kernel_size=1
             ),  # enlarge and squeeze (not based on paper)
             torch.nn.ReLU(),
-            torch.nn.Conv1d(wave_channels * 2, out_channels, kernel_size=1),
+            torch.nn.Conv1d(wave_channels * 2, out_channels, kernel_size=1),  # logits
         )
 
     def forward(self, encoded, skips):
         # Note skips decrease temporarily due to dilated convs,
-        # so we sum only the ones corresponding to not causal padded
+        # so we sum only the ones corresponding to none causally padded
         # results
         N = skips[-1].shape[-1]
         trimmed_skips = [s[..., -N:] for s in skips]
-
-        if self.use_encoded:
-            # Last trimmed skip is not used, since it has already
-            # been added to encoded before
-            sum_terms = trimmed_skips[:-1] + [encoded]
-        else:
-            sum_terms = trimmed_skips
-        return self.transform(torch.stack(sum_terms, dim=0).sum(dim=0))
+        return self.transform(torch.stack(trimmed_skips, dim=0).sum(dim=0))
 
 
-class WaveNetBase(pl.LightningModule):
+@dataclasses.dataclass
+class WaveNetTrainOpts:
+    skip_partial_receptive_field: bool = True
+    lr: float = 1e-3
+    sched_patience: int = 25
+    val_unroll_steps: int = 32
+    val_max_rolls: int = 8
+
+
+class WaveNet(pl.LightningModule):
     def __init__(
         self,
-        in_channels: int = 1,
-        out_channels: int = 1,
+        dilations: Sequence[int] = tuple([2 ** i for i in range(8)] * 2),
+        quantization_levels: int = 2 ** 8,
         wave_channels: int = 32,
-        num_blocks: int = 1,
-        num_layers_per_block: int = 7,
-        use_encoded: bool = False,
+        train_opts: WaveNetTrainOpts = WaveNetTrainOpts(),
     ):
         super().__init__()
-        self.input_conv = torch.nn.Conv1d(in_channels, wave_channels, kernel_size=1)
+        self.input_conv = torch.nn.Conv1d(
+            quantization_levels, wave_channels, kernel_size=1
+        )
         self.wave_layers = torch.nn.ModuleList(
             [
                 WaveNetLayer(
-                    dilation=2 ** d,
+                    dilation=d,
                     wave_channels=wave_channels,
                 )
-                for _ in range(num_blocks)
-                for d in range(num_layers_per_block)
+                for d in dilations
             ]
         )
-        self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.dilations = dilations
+        self.quantization_channels = quantization_levels
         self.wave_channels = wave_channels
-        self.num_blocks = num_blocks
-        self.num_layers_per_block = num_layers_per_block
-        self.receptive_field = compute_receptive_field(
-            num_blocks=num_blocks,
-            num_layers_per_block=num_layers_per_block,
-            kernel_size=2,
-        )
-        self.head = WaveNetHead(
+        self.receptive_field = compute_receptive_field(dilations, kernel_size=2)
+        self.logits = WaveNetLogitsHead(
             wave_channels=wave_channels,
-            out_channels=out_channels,
-            use_encoded=use_encoded,
+            out_channels=quantization_levels,
         )
+        self.train_opts = train_opts
         self.apply(wave_init_weights)
         _logger.info(f"Receptive field of WaveNet {self.receptive_field}")
+        self.save_hyperparameters()
 
     def encode(self, x, strip_padding: bool = True):
         skips = []
@@ -189,13 +168,21 @@ class WaveNetBase(pl.LightningModule):
             skips.append(skip)
         return x, skips, updated_queues
 
-    def forward(self, x):
+    def forward(self, x, is_one_hot: bool = False):
+        if not is_one_hot:
+            # (B,T) -> (B,Q,T)
+            x = F.one_hot(x, num_classes=self.quantization_channels)
+            x = x.permute(0, 2, 1)  # (B,Q,T)
         encoded, _, skips = self.encode(x)
-        return self.head(encoded, skips)
+        return self.logits(encoded, skips)
 
-    def forward_one(self, x, queues: FastQueues):
+    def forward_one(self, x, queues: FastQueues, is_one_hot: bool = False):
+        if not is_one_hot:
+            # (B,1) -> (B,Q,1)
+            x = F.one_hot(x, num_classes=self.quantization_channels)
+            x = x.permute(0, 2, 1)
         encoded, skips, queues = self.encode_one(x, queues)
-        return self.head(encoded, skips), queues
+        return self.logits(encoded, skips), queues
 
     def _next_input_from_queue(self, q: torch.Tensor, x):
         h = q[..., 0:1]  # pop left (oldest)
@@ -241,20 +228,91 @@ class WaveNetBase(pl.LightningModule):
         result = []
         p = self.receptive_field - 1
         for inp, layer in zip(layer_inputs, self.wave_layers):
+            layer: WaveNetLayer
             result.append(inp[..., p:])
             p -= layer.dilation
         return result
 
+    def configure_optimizers(self):
+        import torch.optim.lr_scheduler as sched
+
+        opt = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return {
+            "optimizer": opt,
+            "lr_scheduler": {
+                "scheduler": sched.ReduceLROnPlateau(
+                    opt,
+                    mode="min",
+                    factor=0.5,
+                    patience=self.sched_patience,
+                    min_lr=5e-5,
+                    threshold=1e-7,
+                ),
+                "monitor": "train_loss",
+                "interval": "step",
+                "frequency": 1,
+                "strict": False,
+            },
+        }
+
+    def training_step(self, batch, batch_idx):
+        targets: torch.Tensor = batch["b"][..., 1:]
+        inputs: torch.Tensor = batch["b"][..., :-1]
+        inputs = F.one_hot(inputs, num_classes=self.quantization_channels)  # (B,T,Q)
+        inputs = inputs.permute(0, 2, 1)  # (B,Q,T)
+        logits = self(inputs)
+
+        r = self.receptive_field if self.train_opts.skip_partial_receptive_field else 0
+        loss = F.cross_entropy(logits[..., r:], targets[..., r:])
+
+        self.log("train_loss", loss)
+        return {"loss": loss, "train_loss": loss.detach()}
+
+    def validation_step(self, batch, batch_idx):
+        targets: torch.Tensor = batch["b"][..., 1:]
+        inputs: torch.Tensor = batch["b"][..., :-1]
+
+        roll_y, _, roll_idx = losses.rolling_nstep(
+            self,
+            self.create_sampler(),
+            inputs,
+            num_generate=self.train_opts.val_unroll_steps,
+            max_rolls=self.train_opts.val_max_rolls,
+            random_rolls=False,
+            skip_partial=self.train_opts.skip_partial_receptive_field,
+        )
+        loss = losses.rolling_nstep_ce(roll_y, roll_idx, targets)
+        return {"val_loss": loss}
+
+    def training_epoch_end(self, outputs) -> None:
+        avg_loss = torch.stack([x["train_loss"] for x in outputs]).mean()
+        self.log("train_loss_epoch", avg_loss, prog_bar=True)
+
+    def validation_epoch_end(self, outputs) -> None:
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        self.log("val_loss_epoch", avg_loss, prog_bar=True)
+
+    def create_sampler(self, greedy: bool = False):
+        def greedy_sampler(logits):
+            return torch.argmax(logits, dim=1, keepdim=True)  # (B,1)
+
+        def stochastic_sampler(logits):
+            bin = D.Categorical(logits=logits.permute(0, 2, 1)).sample()  # (B,1)
+            return bin
+
+        if greedy:
+            return greedy_sampler
+        else:
+            return stochastic_sampler
+
 
 class ObservationSampler(Protocol):
-    def __call__(
-        self, model: WaveNetBase, obs: torch.Tensor, x: torch.Tensor
-    ) -> torch.Tensor:
+    def __call__(self, logits: torch.Tensor) -> torch.Tensor:
         ...
 
 
 def generate(
-    model: WaveNetBase,
+    model: WaveNet,
     initial_obs: torch.Tensor,
     sampler: ObservationSampler,
     detach_sample: bool = True,
@@ -266,7 +324,9 @@ def generate(
     # We need to track up to the last n samples,
     # where n equals the receptive field of the model
     R = model.receptive_field
-    history = initial_obs.new_zeros((B, C, R))
+    history = initial_obs.new_zeros(
+        (B, C, R)
+    )  # TODO C=Q, should maybe not be part of sampler, except if one_hot is True
     t = min(R, T)
     history[..., :t] = initial_obs[..., -t:]
 
@@ -284,7 +344,7 @@ def generate(
 
 
 def generate_fast(
-    model: WaveNetBase,
+    model: WaveNet,
     initial_obs: torch.Tensor,
     sampler: ObservationSampler,
     detach_sample: bool = True,

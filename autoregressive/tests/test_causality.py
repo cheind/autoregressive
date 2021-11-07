@@ -1,3 +1,4 @@
+from typing import Sequence
 import torch
 import torch.nn
 
@@ -28,36 +29,28 @@ def test_causal_padding():
     assert sum([l.conv.weight.numel() for l in layers]) == 14
 
 
-def test_data_leakage():
+def test_no_data_leakage():
     """Assert no future data is used in computation"""
-    model = wave.WaveNetBase(
-        in_channels=1,
-        out_channels=1,
-        wave_channels=8,
-        num_blocks=2,
-        num_layers_per_block=3,
+    model = wave.WaveNet(
+        dilations=[2 ** i for i in range(3)] * 2, quantization_levels=3, wave_channels=8
     )
     assert model.receptive_field == 15
-    x = torch.rand(1, 1, 32)
+    x = torch.rand(1, 3, 32)
     y = model(x)  # uses all information
 
     for i in range(10):
-        assert torch.allclose(model(x[..., i : i + 15])[..., -1], y[..., i + 15 - 1])
+        assert torch.allclose(
+            model(x[..., i : i + 15])[..., -1], y[..., i + 15 - 1], atol=1e-4
+        )
 
 
 class WaveNetSim(torch.nn.Module):
-    def __init__(self, num_blocks: int, num_layers_per_block: int):
+    def __init__(self, dilations: Sequence[int]):
         super().__init__()
         self.layers = torch.nn.Sequential(
-            *[
-                torch.nn.Conv1d(1, 1, 2, dilation=2 ** d)
-                for _ in range(num_blocks)
-                for d in range(num_layers_per_block)
-            ]
+            *[torch.nn.Conv1d(1, 1, 2, dilation=d) for d in dilations]
         )
-        self.receptive_field = wave.compute_receptive_field(
-            num_blocks=num_blocks, num_layers_per_block=num_layers_per_block
-        )
+        self.receptive_field = wave.compute_receptive_field(dilation_seq=dilations)
 
     def forward(self, x):
         x = wave.causal_pad(x, 2, self.receptive_field - 1)
@@ -75,7 +68,7 @@ def test_input_coverage():
             if m.bias is not None:
                 torch.nn.init.constant_(m.bias, 0.0)
 
-    model = WaveNetSim(num_blocks=1, num_layers_per_block=3).apply(setup_weights)
+    model = WaveNetSim([1, 2, 4]).apply(setup_weights)
     assert model.receptive_field == 8
     x = torch.arange(0, 16, 1).view(1, 1, -1).float()
     assert torch.allclose(
@@ -105,7 +98,7 @@ def test_input_coverage():
             ]
         ),
     )
-    model = WaveNetSim(num_blocks=2, num_layers_per_block=2).apply(setup_weights)
+    model = WaveNetSim([1, 2, 1, 2]).apply(setup_weights)
     assert model.receptive_field == 7
     torch.allclose(
         model(x),

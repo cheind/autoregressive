@@ -11,12 +11,10 @@ import torch.distributions as D
 import torch.nn.init
 
 from . import losses
+from . import fast
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
-
-FastQueues = List[torch.FloatTensor]
-WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
 
 
 def causal_pad(x: torch.Tensor, kernel_size: int, dilation: int) -> torch.Tensor:
@@ -132,9 +130,10 @@ class WaveNet(pl.LightningModule):
             ]
         )
         self.dilations = dilations
-        self.quantization_channels = quantization_levels
+        self.quantization_levels = quantization_levels
         self.wave_channels = wave_channels
         self.receptive_field = compute_receptive_field(dilations, kernel_size=2)
+        self.num_left_invalid = self._compute_left_invalid()
         self.logits = WaveNetLogitsHead(
             wave_channels=wave_channels,
             out_channels=quantization_levels,
@@ -144,7 +143,7 @@ class WaveNet(pl.LightningModule):
         _logger.info(f"Receptive field of WaveNet {self.receptive_field}")
         self.save_hyperparameters()
 
-    def encode(self, x, strip_padding: bool = True):
+    def encode(self, x, remove_left_invalid: bool = True):
         skips = []
         layer_inputs = []
         x = causal_pad(x, 2, self.receptive_field - 1)
@@ -153,85 +152,54 @@ class WaveNet(pl.LightningModule):
             layer_inputs.append(x)
             x, skip = layer(x, fast=False)
             skips.append(skip)
-        if strip_padding:
-            layer_inputs = self._strip_layer_input_padding(layer_inputs)
+        if remove_left_invalid:
+            layer_inputs = self._remove_left_invalid(layer_inputs)
         return x, layer_inputs, skips
 
-    def encode_one(self, x, queues: FastQueues):
+    def encode_one(self, x, queues: fast.FastQueues):
         skips = []
         updated_queues = []
         x = self.input_conv(x)  # no padding here
         for layer, q in zip(self.wave_layers, queues):
-            x, qnew = self._next_input_from_queue(q, x)
+            h, qnew = fast.pop_push_queue(q, x)
+            x = torch.cat((h, x), -1)  # prepare input
             x, skip = layer(x, fast=True)
             updated_queues.append(qnew)
             skips.append(skip)
         return x, skips, updated_queues
 
-    def forward(self, x, is_one_hot: bool = False):
-        if not is_one_hot:
-            # (B,T) -> (B,Q,T)
-            x = F.one_hot(x, num_classes=self.quantization_channels)
-            x = x.permute(0, 2, 1)  # (B,Q,T)
+    def forward(self, x):
+        # x (B,Q,T)
+        # if not is_one_hot:
+        #     # (B,T) -> (B,Q,T)
+        #     x = F.one_hot(x, num_classes=self.quantization_channels)
+        #     x = x.permute(0, 2, 1)  # (B,Q,T)
         encoded, _, skips = self.encode(x)
         return self.logits(encoded, skips)
 
-    def forward_one(self, x, queues: FastQueues, is_one_hot: bool = False):
-        if not is_one_hot:
-            # (B,1) -> (B,Q,1)
-            x = F.one_hot(x, num_classes=self.quantization_channels)
-            x = x.permute(0, 2, 1)
+    def forward_one(self, x, queues: fast.FastQueues):
+        # x (B,Q,1)
+        # if not is_one_hot:
+        # (B,1) -> (B,Q,1)
+        # x = F.one_hot(x, num_classes=self.quantization_channels)
+        # x = x.permute(0, 2, 1)
         encoded, skips, queues = self.encode_one(x, queues)
         return self.logits(encoded, skips), queues
 
-    def _next_input_from_queue(self, q: torch.Tensor, x):
-        h = q[..., 0:1]  # pop left (oldest)
-        qout = q.roll(-1, -1)  # roll by one in left direction
-        qout[..., -1:] = x  # push right (newest)
-        x = torch.cat((h, x), -1)  # prepare input
-        return x, qout
-
-    def create_empty_queues(
-        self,
-        device: torch.device = None,
-        dtype: torch.dtype = torch.float32,
-        batch_size: int = 1,
-    ) -> FastQueues:
-        queues = []
+    def _compute_left_invalid(self):
+        # TODO does not incorporate filter size other than 2
+        p = self.receptive_field - 1
+        num_inv = []
         for layer in self.wave_layers:
-            layer: WaveNetLayer
-            q = torch.zeros(
-                (batch_size, self.wave_channels, layer.dilation),
-                dtype=dtype,
-                device=device,
-            )  # Populated with zeros will act like causal padding
-            queues.append(q)
-        return queues
+            num_inv.append(p)
+            p = p - layer.dilation
+        return num_inv
 
-    def create_initialized_queues(
-        self, layer_inputs: List[torch.FloatTensor]
-    ) -> FastQueues:
-        queues = []
-        for layer, layer_input in zip(self.wave_layers, layer_inputs):
-            layer: WaveNetLayer
-            assert (
-                layer_input.shape[-1] >= layer.dilation
-            )  # you might have stripped layer inputs
-            q = layer_input[..., -layer.dilation :]
-            queues.append(q)
-        return queues
-
-    def _strip_layer_input_padding(self, layer_inputs: torch.Tensor) -> torch.Tensor:
+    def _remove_left_invalid(self, layer_inputs: torch.Tensor) -> torch.Tensor:
         # Note, layer inputs contain results from causal padding
         # at front. This decreases over layers based on dilation factors.
         # Hence when computing layer-inputs
-        result = []
-        p = self.receptive_field - 1
-        for inp, layer in zip(layer_inputs, self.wave_layers):
-            layer: WaveNetLayer
-            result.append(inp[..., p:])
-            p -= layer.dilation
-        return result
+        return [layer[..., p:] for layer, p in zip(layer_inputs, self.num_left_invalid)]
 
     def configure_optimizers(self):
         import torch.optim.lr_scheduler as sched
@@ -256,10 +224,8 @@ class WaveNet(pl.LightningModule):
         }
 
     def training_step(self, batch, batch_idx):
-        targets: torch.Tensor = batch["b"][..., 1:]
-        inputs: torch.Tensor = batch["b"][..., :-1]
-        inputs = F.one_hot(inputs, num_classes=self.quantization_channels)  # (B,T,Q)
-        inputs = inputs.permute(0, 2, 1)  # (B,Q,T)
+        targets: torch.Tensor = batch["y"][..., 1:]  # (B,T)
+        inputs: torch.Tensor = batch["x"][..., :-1]  # (B,Q,T)
         logits = self(inputs)
 
         r = self.receptive_field if self.train_opts.skip_partial_receptive_field else 0
@@ -269,19 +235,19 @@ class WaveNet(pl.LightningModule):
         return {"loss": loss, "train_loss": loss.detach()}
 
     def validation_step(self, batch, batch_idx):
-        targets: torch.Tensor = batch["b"][..., 1:]
-        inputs: torch.Tensor = batch["b"][..., :-1]
+        inputs: torch.Tensor = batch["x"][..., :-1]
+        targets: torch.Tensor = batch["y"][..., 1:]
 
-        roll_y, _, roll_idx = losses.rolling_nstep(
+        _, roll_logits, roll_idx = losses.rolling_nstep(
             self,
-            self.create_sampler(),
+            lambda logits: logits,
             inputs,
             num_generate=self.train_opts.val_unroll_steps,
             max_rolls=self.train_opts.val_max_rolls,
             random_rolls=False,
             skip_partial=self.train_opts.skip_partial_receptive_field,
         )
-        loss = losses.rolling_nstep_ce(roll_y, roll_idx, targets)
+        loss = losses.rolling_nstep_ce(roll_logits, roll_idx, targets)
         return {"val_loss": loss}
 
     def training_epoch_end(self, outputs) -> None:
@@ -294,98 +260,16 @@ class WaveNet(pl.LightningModule):
 
     def create_sampler(self, greedy: bool = False):
         def greedy_sampler(logits):
-            return torch.argmax(logits, dim=1, keepdim=True)  # (B,1)
+            amax = torch.argmax(logits, dim=1, keepdim=True)  # (B,1)
+            oh = F.one_hot(amax, num_classes=self.quantization_levels)  # (B,1,Q)
+            return oh.permute(0, 2, 1)  # (B,Q,1)
 
         def stochastic_sampler(logits):
-            bin = D.Categorical(logits=logits.permute(0, 2, 1)).sample()  # (B,1)
-            return bin
+            bins = D.Categorical(logits=logits.permute(0, 2, 1)).sample()  # (B,1)
+            oh = F.one_hot(bins, num_classes=self.quantization_levels)  # (B,1,Q)
+            return oh.permute(0, 2, 1)  # (B,Q,1)
 
         if greedy:
             return greedy_sampler
         else:
             return stochastic_sampler
-
-
-class ObservationSampler(Protocol):
-    def __call__(self, logits: torch.Tensor) -> torch.Tensor:
-        ...
-
-
-def generate(
-    model: WaveNet,
-    initial_obs: torch.Tensor,
-    sampler: ObservationSampler,
-    detach_sample: bool = True,
-) -> WaveGenerator:
-    B, C, T = initial_obs.shape
-    if T < 1:
-        raise ValueError("Need at least one observation to bootstrap.")
-
-    # We need to track up to the last n samples,
-    # where n equals the receptive field of the model
-    R = model.receptive_field
-    history = initial_obs.new_zeros(
-        (B, C, R)
-    )  # TODO C=Q, should maybe not be part of sampler, except if one_hot is True
-    t = min(R, T)
-    history[..., :t] = initial_obs[..., -t:]
-
-    while True:
-        obs = history[..., :t]
-        x = model.forward(obs)
-        s = sampler(model, obs, x[..., -1:])  # yield sample for t+1 only
-        yield s, x[..., -1:]
-        if detach_sample:
-            s = s.detach()
-        roll = int(t == R)
-        history = history.roll(-roll, -1)  # no-op as long as history is not full
-        t = min(t + 1, R)
-        history[..., t - 1 : t] = s
-
-
-def generate_fast(
-    model: WaveNet,
-    initial_obs: torch.Tensor,
-    sampler: ObservationSampler,
-    detach_sample: bool = True,
-    layer_inputs: List[torch.Tensor] = None,
-) -> WaveGenerator:
-    B, _, T = initial_obs.shape
-    if T < 1:
-        raise ValueError("Need at least one observation to bootstrap.")
-    # prepare queues
-    if T == 1:
-        queues = model.create_empty_queues(
-            device=initial_obs.device,
-            dtype=initial_obs.dtype,
-            batch_size=B,
-        )
-    else:
-        if layer_inputs is None:
-            _, layer_inputs, _ = model.encode(
-                initial_obs[..., :-1], strip_padding=False
-            )  # TODO we should encode only necessary inputs
-        else:
-            layer_inputs = [inp[..., :-1] for inp in layer_inputs]
-        queues = model.create_initialized_queues(layer_inputs)
-    # generate
-    obs = initial_obs[..., -1:]
-    while True:
-        x, queues = model.forward_one(obs, queues)
-        s = sampler(model, obs, x)
-        yield s, x
-        if detach_sample:
-            s = s.detach()
-        obs = s
-
-
-def slice_generator(
-    gen: WaveGenerator,
-    stop: int,
-    step: int = 1,
-    start: int = 0,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Slices the given generator to get subsequent predictions and network outputs."""
-    sl = itertools.islice(gen, start, stop, step)  # List[(sample,output)]
-    samples, outputs = list(zip(*sl))
-    return torch.cat(samples, -1), torch.cat(outputs, -1)

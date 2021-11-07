@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Tuple, Sequence
 
 import torch
+import torch.nn.functional as F
 import torch.utils.data as data
 
 from .common import Sample, SeriesDataset
@@ -41,16 +42,19 @@ class Noise(ApplyWithProb):
 class Quantize:
     """Quantizes observations to nearest multiple of bin-size"""
 
-    def __init__(self, bin_size: float = 0.05, num_bins: int = None) -> None:
-        if num_bins is not None:
-            bin_size = 1 / (num_bins - 1)
-        self.bin_size = bin_size
+    def __init__(self, num_levels: int, one_hot: bool = True) -> None:
+        self.bin_size = 1 / (num_levels - 1)
+        self.num_levels = num_levels
+        self.one_hot = one_hot
 
     def __call__(self, sample: Sample) -> Sample:
         x = sample["x"]
-        b = torch.round(x / self.bin_size)
-        sample["x"] = b * self.bin_size
-        sample["b"] = b.long()
+        y = torch.round(x / self.bin_size).long()
+        if self.one_hot:
+            sample["x"] = F.one_hot(y).permute(1, 0)  # (Q,T)
+        else:
+            sample["x"] = y * self.bin_size
+        sample["y"] = y
         return sample
 
 

@@ -92,7 +92,7 @@ class BentLinesDataModule(pl.LightningDataModule):
             quantization_range = transforms.Normalize.find_range(train_ds, val_ds)
         transform = transforms.chain_transforms(
             transforms.Normalize(quantization_range, (0.0, 1.0)),
-            transforms.Quantize(num_bins=quantization_levels),
+            transforms.Quantize(num_levels=quantization_levels, one_hot=True),
         )
         self.train_ds = BentLinesDataset(train_params, transform=transform)
         self.val_ds = BentLinesDataset(val_params, transform=transform)

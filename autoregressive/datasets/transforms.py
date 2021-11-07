@@ -3,9 +3,10 @@ from abc import ABC, abstractmethod
 from typing import Tuple, Sequence
 
 import torch
+import torch.utils.data as data
 
-from .common import Sample
-from .functional import normalize_series
+from .common import Sample, SeriesDataset
+from . import functional
 
 
 class ApplyWithProb(ABC):
@@ -74,10 +75,20 @@ class Normalize:
         self.target_range = target_range
 
     def __call__(self, sample: Sample) -> Sample:
-        self.sample["x"] = normalize_series(
-            self.sample["x"], self.source_range, self.target_range
+        sample["x"] = functional.normalize_series(
+            sample["x"], self.source_range, self.target_range
         )
         return sample
+
+    @staticmethod
+    def find_range(*datasets: SeriesDataset):
+        """Returns source range for all series in given datasets"""
+
+        def genx(ds):
+            for s in ds:
+                yield s["x"]
+
+        return functional.find_series_range(genx(data.ConcatDataset(datasets)))
 
 
 def chain_transforms(*args: Sequence[Sample]):

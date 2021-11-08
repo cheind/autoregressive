@@ -102,7 +102,6 @@ class BentLinesDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.dt = self.train_ds.dt
-        self.save_hyperparameters()
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(

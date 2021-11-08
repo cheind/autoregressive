@@ -28,7 +28,7 @@ def wave_init_weights(m):
     if isinstance(m, torch.nn.Conv1d):
         torch.nn.init.xavier_uniform_(m.weight)
         if m.bias is not None:
-            torch.nn.init.constant_(m.bias, 0.0)
+            torch.nn.init.normal_(m.bias, std=1e-3)
 
 
 def compute_receptive_field(

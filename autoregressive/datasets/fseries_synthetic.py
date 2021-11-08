@@ -126,7 +126,7 @@ class FSeriesParams:
     period_range: FloatOrFloatRange = 10.0
     bias_range: FloatOrFloatRange = 0.0
     coeff_range: FloatOrFloatRange = (-1.0, 1.0)
-    phase_range: FloatOrFloatRange = (-PI, PI)
+    phase_range: FloatOrFloatRange = (-functional.PI, functional.PI)
     lineartrend_range: FloatOrFloatRange = 0.0
     smoothness: float = 0.0
     transform: Callable[[Sample], Sample] = None

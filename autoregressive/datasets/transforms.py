@@ -43,13 +43,13 @@ class Quantize:
     """Quantizes observations to nearest multiple of bin-size"""
 
     def __init__(self, num_levels: int, one_hot: bool = True) -> None:
-        self.bin_size = 1 / (num_levels - 1)
+        self.bin_size = 1 / num_levels
         self.num_levels = num_levels
         self.one_hot = one_hot
 
     def __call__(self, sample: Sample) -> Sample:
         x = sample["x"]
-        y = torch.round(x / self.bin_size).long()
+        y = torch.floor(x / self.bin_size).clamp(0, self.num_levels - 1).long()
         if self.one_hot:
             sample["x"] = (
                 F.one_hot(y, num_classes=self.num_levels).permute(1, 0).float()

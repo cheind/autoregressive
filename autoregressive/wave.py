@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Iterator, List, Protocol, Tuple, Sequence
+from typing import Iterable, Iterator, List, Protocol, Tuple, Sequence
 import dataclasses
 
 import pytorch_lightning as pl
@@ -32,7 +32,7 @@ def wave_init_weights(m):
 
 
 def compute_receptive_field(
-    dilation_seq: Sequence[int] = None,
+    dilation_seq: Iterable[int] = None,
     kernel_size: int = 2,
 ) -> int:
     return (kernel_size - 1) * sum(dilation_seq) + 1
@@ -111,7 +111,7 @@ class WaveNetTrainOpts:
 class WaveNet(pl.LightningModule):
     def __init__(
         self,
-        dilations: Sequence[int] = tuple([2 ** i for i in range(8)] * 2),
+        dilations: list[int] = [2 ** i for i in range(8)] * 2,
         quantization_levels: int = 2 ** 8,
         wave_channels: int = 32,
         train_opts: WaveNetTrainOpts = WaveNetTrainOpts(),
@@ -129,7 +129,7 @@ class WaveNet(pl.LightningModule):
                 for d in dilations
             ]
         )
-        self.dilations = dilations
+        self.dilations = list(dilations)
         self.quantization_levels = quantization_levels
         self.wave_channels = wave_channels
         self.receptive_field = compute_receptive_field(dilations, kernel_size=2)
@@ -170,19 +170,11 @@ class WaveNet(pl.LightningModule):
 
     def forward(self, x):
         # x (B,Q,T)
-        # if not is_one_hot:
-        #     # (B,T) -> (B,Q,T)
-        #     x = F.one_hot(x, num_classes=self.quantization_channels)
-        #     x = x.permute(0, 2, 1)  # (B,Q,T)
         encoded, _, skips = self.encode(x)
         return self.logits(encoded, skips)
 
     def forward_one(self, x, queues: fast.FastQueues):
         # x (B,Q,1)
-        # if not is_one_hot:
-        # (B,1) -> (B,Q,1)
-        # x = F.one_hot(x, num_classes=self.quantization_channels)
-        # x = x.permute(0, 2, 1)
         encoded, skips, queues = self.encode_one(x, queues)
         return self.logits(encoded, skips), queues
 
@@ -204,7 +196,7 @@ class WaveNet(pl.LightningModule):
     def configure_optimizers(self):
         import torch.optim.lr_scheduler as sched
 
-        opt = torch.optim.Adam(self.parameters(), lr=self.lr)
+        opt = torch.optim.Adam(self.parameters(), lr=self.train_opts.lr)
         return {
             "optimizer": opt,
             "lr_scheduler": {
@@ -212,7 +204,7 @@ class WaveNet(pl.LightningModule):
                     opt,
                     mode="min",
                     factor=0.5,
-                    patience=self.sched_patience,
+                    patience=self.train_opts.sched_patience,
                     min_lr=5e-5,
                     threshold=1e-7,
                 ),
@@ -240,11 +232,11 @@ class WaveNet(pl.LightningModule):
 
         _, roll_logits, roll_idx = losses.rolling_nstep(
             self,
-            lambda logits: logits,
+            self.create_sampler(greedy=True),
             inputs,
             num_generate=self.train_opts.val_unroll_steps,
             max_rolls=self.train_opts.val_max_rolls,
-            random_rolls=False,
+            random_rolls=True,
             skip_partial=self.train_opts.skip_partial_receptive_field,
         )
         loss = losses.rolling_nstep_ce(roll_logits, roll_idx, targets)
@@ -260,14 +252,16 @@ class WaveNet(pl.LightningModule):
 
     def create_sampler(self, greedy: bool = False):
         def greedy_sampler(logits):
-            amax = torch.argmax(logits, dim=1, keepdim=True)  # (B,1)
+            # logits (B,Q,1)
+            amax = torch.argmax(logits, dim=1, keepdim=False)  # (B,1)
             oh = F.one_hot(amax, num_classes=self.quantization_levels)  # (B,1,Q)
-            return oh.permute(0, 2, 1)  # (B,Q,1)
+            return oh.permute(0, 2, 1).float()  # (B,Q,1)
 
         def stochastic_sampler(logits):
+            # logits (B,Q,1)
             bins = D.Categorical(logits=logits.permute(0, 2, 1)).sample()  # (B,1)
             oh = F.one_hot(bins, num_classes=self.quantization_levels)  # (B,1,Q)
-            return oh.permute(0, 2, 1)  # (B,Q,1)
+            return oh.permute(0, 2, 1).float()  # (B,Q,1)
 
         if greedy:
             return greedy_sampler

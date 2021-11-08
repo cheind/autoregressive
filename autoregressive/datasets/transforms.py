@@ -51,7 +51,9 @@ class Quantize:
         x = sample["x"]
         y = torch.round(x / self.bin_size).long()
         if self.one_hot:
-            sample["x"] = F.one_hot(y).permute(1, 0)  # (Q,T)
+            sample["x"] = (
+                F.one_hot(y, num_classes=self.num_levels).permute(1, 0).float()
+            )  # (Q,T)
         else:
             sample["x"] = y * self.bin_size
         sample["y"] = y

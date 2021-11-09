@@ -57,7 +57,7 @@ def test_rolling_nstep():
         max_rolls=2,
         random_rolls=True,
     )
-    assert len(set(yidx.tolist()) & set([9, 10])) == 2
+    assert len(set(yidx.tolist()) & set([8, 10])) == 2
     _, _, yidx = losses.rolling_nstep(
         model,
         identity_sampler,

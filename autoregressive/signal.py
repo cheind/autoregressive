@@ -2,6 +2,7 @@ __all__ = [
     "signal_minmax",
     "signal_normalize",
     "signal_quantize_midtread",
+    "signal_preprocess",
 ]
 
 from typing import Iterable, Union
@@ -47,7 +48,7 @@ def signal_quantize_midtread(x: torch.Tensor, bin_size: float):
 
 def signal_preprocess(
     x: torch.Tensor, num_bins: int, signal_range: tuple[float, float] = None
-):
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Combines signal normalization and quantization."""
     if signal_range is None:
         signal_range = signal_minmax(x)

@@ -9,8 +9,8 @@ if TYPE_CHECKING:
 FastQueues = List[torch.FloatTensor]
 
 
-def pop_push_queue(q: torch.Tensor, x) -> torch.Tensor:
-    h = q[..., 0:1]  # pop left (oldest)
+def pop_push_queue(q: torch.Tensor, x, pop_size: int = 1) -> torch.Tensor:
+    h = q[..., 0:pop_size]  # pop left (oldest)
     qout = q.roll(-1, -1)  # roll by one in left direction
     qout[..., -1:] = x  # push right (newest)
     return h, qout
@@ -23,10 +23,10 @@ def create_empty_queues(
     batch_size: int = 1,
 ) -> FastQueues:
     queues = []
-    for layer in model.wave_layers:
+    for layer in model.layers:
         layer: "WaveNetLayer"
         q = torch.zeros(
-            (batch_size, layer.wave_channels, layer.dilation),
+            (batch_size, layer.wave_channels, layer.recurrent_size),
             dtype=dtype,
             device=device,
         )  # Populated with zeros will act like causal padding

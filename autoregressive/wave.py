@@ -32,21 +32,29 @@ def wave_init_weights(m):
 
 
 def compute_receptive_field(
-    dilation_seq: Iterable[int] = None,
-    kernel_size: int = 2,
+    dilations: Iterable[int],
+    kernel_sizes: Iterable[int],
 ) -> int:
-    return (kernel_size - 1) * sum(dilation_seq) + 1
+    return sum((k - 1) * d for k, d in zip(kernel_sizes, dilations)) + 1
 
 
 class WaveNetLayer(torch.nn.Module):
-    def __init__(self, dilation: int, wave_channels: int = 32):
+    def __init__(
+        self,
+        kernel_size: int,
+        dilation: int,
+        wave_channels: int = 32,
+    ):
         super().__init__()
         self.dilation = dilation
+        self.kernel_size = kernel_size
         self.wave_channels = wave_channels
+        self.causal_left_pad = (kernel_size - 1) * dilation
+        self.recurrent_size = self.kernel_size - 1
         self.conv_dilation = torch.nn.Conv1d(
             wave_channels,
             2 * wave_channels,  # See PixelCNN, we stack W f,k and W g,k
-            kernel_size=2,
+            kernel_size=kernel_size,
             dilation=dilation,
         )
         self.conv_skip = torch.nn.Conv1d(
@@ -55,27 +63,60 @@ class WaveNetLayer(torch.nn.Module):
             kernel_size=1,
         )
 
-    def forward(self, x, fast: bool = False):
+    def forward(self, x, h: torch.Tensor = None):
         """
         When fast is enabled, this function assumes that x is composed
-        of the last 'recurrent' input, that is `dilation` steps back and
+        of the last 'recurrent' inputs, that is `dilation*(kernel-1)` steps back and
         the current input.
         """
-        d = 1 if fast else self.dilation
-        x_dilated = F.conv1d(
-            x,
-            self.conv_dilation.weight,
-            self.conv_dilation.bias,
-            dilation=d,
-        )
-        T = x_dilated.shape[-1]
-
+        if h is not None:
+            assert h.shape[-1] == self.recurrent_size
+            cc = torch.cat((h, x), -1)
+            x_dilated = F.conv1d(
+                cc,
+                self.conv_dilation.weight,
+                self.conv_dilation.bias,
+                dilation=1,
+            )
+        else:
+            x_dilated = self.conv_dilation(F.pad(x, (self.causal_left_pad, 0)))
         x_filter = torch.tanh(x_dilated[:, : self.wave_channels])
         x_gate = torch.sigmoid(x_dilated[:, self.wave_channels :])
         x_h = x_gate * x_filter
         skip = self.conv_skip(x_h)
-        out = x[..., -T:] + skip  # trim-off causal padded results
+        out = x + skip
         return out, skip
+
+
+class WaveNetInputLayer(torch.nn.Module):
+    def __init__(
+        self,
+        kernel_size: int,
+        input_channels: int,
+        wave_channels: int = 32,
+    ):
+        super().__init__()
+        self.dilation = 1
+        self.kernel_size = kernel_size
+        self.wave_channels = wave_channels
+        self.input_channels = input_channels
+        self.causal_left_pad = (kernel_size - 1) * self.dilation
+        self.recurrent_size = self.kernel_size - 1
+        self.conv = torch.nn.Conv1d(
+            input_channels,
+            wave_channels,
+            kernel_size=kernel_size,
+            dilation=self.dilation,
+        )
+
+    def forward(self, x, h: torch.Tensor = None):
+        if h is not None:
+            assert h.shape[-1] == self.recurrent_size
+            x = torch.cat((h, x), -1)
+        else:
+            x = F.pad(x, (self.causal_left_pad, 0))
+        x = self.conv(x)
+        return x, x.new_zeros(*x.shape)  # zeros are not changing head
 
 
 class WaveNetLogitsHead(torch.nn.Module):
@@ -91,12 +132,9 @@ class WaveNetLogitsHead(torch.nn.Module):
         )
 
     def forward(self, encoded, skips):
-        # Note skips decrease temporarily due to dilated convs,
-        # so we sum only the ones corresponding to none causally padded
-        # results
-        N = skips[-1].shape[-1]
-        trimmed_skips = [s[..., -N:] for s in skips]
-        return self.transform(torch.stack(trimmed_skips, dim=0).sum(dim=0))
+        del encoded
+        skips = skips[1:]  # remove input-layer dummy skip
+        return self.transform(torch.stack(skips, dim=0).sum(dim=0))
 
 
 @dataclasses.dataclass
@@ -111,87 +149,89 @@ class WaveNetTrainOpts:
 class WaveNet(pl.LightningModule):
     def __init__(
         self,
-        dilations: list[int] = [2 ** i for i in range(8)] * 2,
         quantization_levels: int = 2 ** 8,
+        wave_dilations: list[int] = [2 ** i for i in range(8)] * 2,
+        wave_kernel_size: int = 2,
         wave_channels: int = 32,
+        input_kernel_size: int = 1,
         train_opts: WaveNetTrainOpts = WaveNetTrainOpts(),
     ):
         super().__init__()
         self.input_conv = torch.nn.Conv1d(
-            quantization_levels, wave_channels, kernel_size=1
+            quantization_levels,
+            wave_channels,
+            kernel_size=input_kernel_size,
+            dilation=1,
         )
-        self.wave_layers = torch.nn.ModuleList(
-            [
-                WaveNetLayer(
-                    dilation=d,
-                    wave_channels=wave_channels,
-                )
-                for d in dilations
-            ]
-        )
-        self.dilations = list(dilations)
-        self.quantization_levels = quantization_levels
-        self.wave_channels = wave_channels
-        self.receptive_field = compute_receptive_field(dilations, kernel_size=2)
-        self.num_left_invalid = self._compute_left_invalid()
+        layers = [
+            WaveNetInputLayer(
+                kernel_size=input_kernel_size,
+                input_channels=quantization_levels,
+                wave_channels=wave_channels,
+            )
+        ]
+        layers += [
+            WaveNetLayer(
+                kernel_size=wave_kernel_size,
+                dilation=d,
+                wave_channels=wave_channels,
+            )
+            for d in wave_dilations
+        ]
+        self.layers = torch.nn.ModuleList(layers)
         self.logits = WaveNetLogitsHead(
             wave_channels=wave_channels,
             out_channels=quantization_levels,
         )
+        self.quantization_levels = quantization_levels
+        self.wave_channels = wave_channels
+        self.input_kernel_size = input_kernel_size
         self.train_opts = train_opts
+        self.receptive_field = compute_receptive_field(
+            kernel_sizes=[layer.kernel_size for layer in self.layers],
+            dilations=[layer.dilation for layer in self.layers],
+        )
         self.apply(wave_init_weights)
         _logger.info(f"Receptive field of WaveNet {self.receptive_field}")
         self.save_hyperparameters()
 
-    def encode(self, x, remove_left_invalid: bool = True):
+    def encode(self, x, queues: fast.FastQueues = None):
         skips = []
         layer_inputs = []
-        x = causal_pad(x, 2, self.receptive_field - 1)
-        x = self.input_conv(x)
-        for layer in self.wave_layers:
+        out_queues = []
+        if queues is None:
+            queues = [None] * len(self.layers)
+
+        for layer, q in zip(self.layers, queues):
             layer_inputs.append(x)
-            x, skip = layer(x, fast=False)
+            h = None
+            if q is not None:
+                h, q = fast.pop_push_queue(q, x)
+            out_queues.append(q)
+            x, skip = layer(x, h=h)
             skips.append(skip)
-        if remove_left_invalid:
-            layer_inputs = self._remove_left_invalid(layer_inputs)
-        return x, layer_inputs, skips
 
-    def encode_one(self, x, queues: fast.FastQueues):
-        skips = []
-        updated_queues = []
-        x = self.input_conv(x)  # no padding here
-        for layer, q in zip(self.wave_layers, queues):
-            h, qnew = fast.pop_push_queue(q, x)
-            x = torch.cat((h, x), -1)  # prepare input
-            x, skip = layer(x, fast=True)
-            updated_queues.append(qnew)
-            skips.append(skip)
-        return x, skips, updated_queues
+        if queues[0] is None:
+            out_queues = None
 
-    def forward(self, x):
-        # x (B,Q,T)
-        encoded, _, skips = self.encode(x)
-        return self.logits(encoded, skips)
+        return x, layer_inputs, skips, out_queues
 
-    def forward_one(self, x, queues: fast.FastQueues):
-        # x (B,Q,1)
-        encoded, skips, queues = self.encode_one(x, queues)
-        return self.logits(encoded, skips), queues
+    # def encode_one(self, x, queues: fast.FastQueues):
+    #     skips = []
+    #     updated_queues = []
+    #     x = self.input_conv(x)  # no padding here
+    #     for layer, q in zip(self.wave_layers, queues):
+    #         h, qnew = fast.pop_push_queue(q, x)
+    #         x = torch.cat((h, x), -1)  # prepare input
+    #         x, skip = layer(x, fast=True)
+    #         updated_queues.append(qnew)
+    #         skips.append(skip)
+    #     return x, skips, updated_queues
 
-    def _compute_left_invalid(self):
-        # TODO does not incorporate filter size other than 2
-        p = self.receptive_field - 1
-        num_inv = []
-        for layer in self.wave_layers:
-            num_inv.append(p)
-            p = p - layer.dilation
-        return num_inv
-
-    def _remove_left_invalid(self, layer_inputs: torch.Tensor) -> torch.Tensor:
-        # Note, layer inputs contain results from causal padding
-        # at front. This decreases over layers based on dilation factors.
-        # Hence when computing layer-inputs
-        return [layer[..., p:] for layer, p in zip(layer_inputs, self.num_left_invalid)]
+    def forward(self, x, queues: fast.FastQueues = None):
+        # x (B,Q,T) or (B,Q,1)
+        encoded, _, skips, outqueues = self.encode(x)
+        return self.logits(encoded, skips), outqueues
 
     def configure_optimizers(self):
         import torch.optim.lr_scheduler as sched

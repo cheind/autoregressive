@@ -3,14 +3,14 @@ import torch
 import torch.nn.functional as F
 
 if TYPE_CHECKING:
-    from .wave import WaveNet
+    from .wave import WaveNet, ObservationSampler
 
 from . import generators
 
 
 def rolling_nstep(
     model: "WaveNet",
-    sampler: generators.ObservationSampler,
+    sampler: "ObservationSampler",
     x: torch.Tensor,
     num_generate: int = 16,
     max_rolls: int = None,
@@ -44,7 +44,7 @@ def rolling_nstep(
         # Hence, observations until t, correspond to layer inputs until p+t, where p
         # is the number of left-invalid elements in the given input layer.
 
-        gen = generators.generate_fast(
+        gen = wave.generate_fast(
             model,
             roll_obs,
             sampler,

@@ -9,7 +9,7 @@ import torch.nn
 import torch.nn.functional as F
 import torch.nn.init
 
-from . import fast, losses
+from . import fast, losses, generators
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -155,11 +155,11 @@ class WaveNetLogitsHead(WaveLayerBase):
 
 @dataclasses.dataclass
 class WaveNetTrainOpts:
-    skip_partial_receptive_field: bool = True
+    skip_partial: bool = True
     lr: float = 1e-3
     sched_patience: int = 25
-    val_unroll_steps: int = 32
-    val_max_rolls: int = 8
+    val_ro_horizon: int = 32
+    val_ro_num_origins: int = 8
 
 
 class WaveNet(pl.LightningModule):
@@ -258,7 +258,7 @@ class WaveNet(pl.LightningModule):
         inputs: torch.Tensor = batch["x"][..., :-1]  # (B,Q,T)
         logits = self(inputs)
 
-        r = self.receptive_field if self.train_opts.skip_partial_receptive_field else 0
+        r = self.receptive_field if self.train_opts.skip_partial else 0
         loss = F.cross_entropy(logits[..., r:], targets[..., r:])
 
         self.log("train_loss", loss)
@@ -268,16 +268,16 @@ class WaveNet(pl.LightningModule):
         inputs: torch.Tensor = batch["x"][..., :-1]
         targets: torch.Tensor = batch["y"][..., 1:]
 
-        _, roll_logits, roll_idx = losses.rolling_nstep(
+        _, roll_logits, roll_idx = generators.rolling_origin(
             self,
             self.create_sampler(greedy=True),
             inputs,
-            num_generate=self.train_opts.val_unroll_steps,
-            max_rolls=self.train_opts.val_max_rolls,
-            random_rolls=True,
-            skip_partial=self.train_opts.skip_partial_receptive_field,
+            horizon=self.train_opts.val_ro_horizon,
+            num_origins=self.train_opts.val_ro_num_origins,
+            random_origins=True,
+            skip_partial=self.train_opts.skip_partial,
         )
-        loss = losses.rolling_nstep_ce(roll_logits, roll_idx, targets)
+        loss = _rolling_origin_ce(roll_logits, roll_idx, targets)
         return {"val_loss": loss}
 
     def training_epoch_end(self, outputs) -> None:
@@ -305,3 +305,17 @@ class WaveNet(pl.LightningModule):
             return greedy_sampler
         else:
             return stochastic_sampler
+
+
+def _rolling_origin_ce(
+    roll_logits: torch.Tensor, roll_idx: torch.Tensor, targets: torch.Tensor
+) -> float:
+    H = roll_logits.shape[-1]  # horizon
+    sum_loss = 0.0
+    num_pred = 0
+    for logits, idx in zip(roll_logits, roll_idx):
+        roll_targets = targets[..., idx : idx + H]
+        ce = F.cross_entropy(logits, roll_targets, reduction="sum")
+        sum_loss = sum_loss + ce
+        num_pred = num_pred + roll_targets.numel()
+    return sum_loss / num_pred

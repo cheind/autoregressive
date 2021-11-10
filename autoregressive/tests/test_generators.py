@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 from .. import wave, generators
 
 
@@ -72,3 +71,65 @@ def test_generators():
     yfast_samples, _ = generators.slice_generator(gfast, 60)
     assert yslow_samples.shape == (1, 1, 60)
     assert torch.allclose(yslow_samples, yfast_samples, atol=1e-4)
+
+
+@torch.no_grad()
+def test_rolling_origin():
+    torch.manual_seed(123)
+    model = wave.WaveNet(
+        wave_dilations=[1, 2, 4],
+        quantization_levels=1,
+        wave_channels=8,
+    )
+    assert model.receptive_field == 8
+    seq = torch.rand(2, 1, 16)
+    x = seq[..., :-1]
+    y, _ = model(x)
+
+    _, rolls_logits, yidx = generators.rolling_origin(
+        model,
+        identity_sampler,
+        x,
+        horizon=4,
+        skip_partial=True,
+    )
+    # first pred is [7,8,9,10] using obs 0..7
+    # next is [8,9,10,11] using obs 1..8
+    # up to 15
+    assert torch.allclose(yidx, torch.tensor([7, 8, 9, 10, 11]))
+    assert rolls_logits.shape == (5, 2, 1, 4)
+    assert torch.allclose(rolls_logits[0, :, :, 0], y[..., 7])
+    assert torch.allclose(rolls_logits[1, :, :, 0], y[..., 8])
+    assert torch.allclose(rolls_logits[2, :, :, 0], y[..., 9])
+    assert torch.allclose(rolls_logits[3, :, :, 0], y[..., 10])
+    assert torch.allclose(rolls_logits[4, :, :, 0], y[..., 11])
+
+    # Test some parameter variantions
+    _, _, yidx = generators.rolling_origin(
+        model,
+        identity_sampler,
+        x,
+        horizon=4,
+        skip_partial=False,
+    )
+    assert torch.allclose(yidx, torch.arange(0, 12, 1))
+    _, _, yidx = generators.rolling_origin(
+        model,
+        identity_sampler,
+        x,
+        horizon=4,
+        skip_partial=True,
+        num_origins=2,
+        random_origins=True,
+    )
+    assert len(set(yidx.tolist()) & set([8, 10])) == 2
+    _, _, yidx = generators.rolling_origin(
+        model,
+        identity_sampler,
+        x,
+        horizon=4,
+        skip_partial=True,
+        num_origins=2,
+        random_origins=False,
+    )
+    assert torch.allclose(yidx, torch.tensor([7, 8]))

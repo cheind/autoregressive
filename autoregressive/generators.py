@@ -1,4 +1,6 @@
+__all__ = ["generate", "generate_fast", "slice_generator", "rolling_origin"]
 import itertools
+import warnings
 from typing import TYPE_CHECKING, Iterator, List, Tuple
 
 import torch
@@ -82,3 +84,48 @@ def slice_generator(
     sl = itertools.islice(gen, start, stop, step)  # List[(sample,output)]
     samples, outputs = list(zip(*sl))
     return torch.cat(samples, -1), torch.cat(outputs, -1)
+
+
+def rolling_origin(
+    model: "WaveNet",
+    sampler: "ObservationSampler",
+    obs: torch.Tensor,
+    horizon: int = 16,
+    num_origins: int = None,
+    random_origins: bool = False,
+    skip_partial: bool = True,
+):
+    # See https://cran.r-project.org/web/packages/greybox/vignettes/ro.html
+    (_, _, T), R = obs.shape, model.receptive_field
+    if horizon == 1:
+        warnings.warn(
+            "Consider using wavnet.forward(), which performs a horizon 1 rolling origin more efficiently"
+        )
+
+    off = (R - 1) if skip_partial else 0
+    roll_idx = torch.arange(off, T - horizon + 1, 1, device=obs.device)
+    if num_origins is not None:
+        if random_origins:
+            ids = torch.ones(len(roll_idx)).multinomial(num_origins, replacement=False)
+            roll_idx = roll_idx[ids]
+        else:
+            roll_idx = roll_idx[:num_origins]
+
+    _, layer_inputs, _, _ = model.encode(obs)
+
+    all_roll_samples = []
+    all_roll_logits = []
+    for ridx in roll_idx:
+        roll_obs = obs[..., : (ridx + 1)]
+        roll_inputs = [layer[..., : (ridx + 1)] for layer in layer_inputs]
+
+        gen = generate_fast(
+            model,
+            roll_obs,
+            sampler,
+            layer_inputs=roll_inputs,
+        )
+        roll_samples, roll_logits = slice_generator(gen, horizon)
+        all_roll_logits.append(roll_logits)
+        all_roll_samples.append(roll_samples)
+    return torch.stack(all_roll_samples, 0), torch.stack(all_roll_logits, 0), roll_idx

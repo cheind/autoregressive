@@ -20,12 +20,6 @@ class ObservationSampler(Protocol):
         ...
 
 
-def causal_pad(x: torch.Tensor, kernel_size: int, dilation: int) -> torch.Tensor:
-    """Performs a cause padding to avoid data leakage. Stride is assumed to be one."""
-    left_pad = (kernel_size - 1) * dilation
-    return F.pad(x, (left_pad, 0))
-
-
 def wave_init_weights(m):
     """Initialize conv1d with Xavier_uniform weight and 0 bias."""
     if isinstance(m, torch.nn.Conv1d):

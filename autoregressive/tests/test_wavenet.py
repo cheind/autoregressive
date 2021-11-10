@@ -98,3 +98,56 @@ def test_wavenet_encode():
     e, _, _, _ = wn.encode(x)
     e2, _, _, _ = wn.encode(x[..., 0:R])
     assert torch.allclose(e2[..., -1], e[..., R - 1])
+
+
+def test_coverage_leakage():
+    """Check correct inputs are accessed and no data is leaked from the future"""
+
+    def setup_weights(m):
+        """Setup weights, so that output is sum of inputs"""
+        if isinstance(m, torch.nn.Conv1d):
+            torch.nn.init.constant_(m.weight, 1.0)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0.0)
+
+    def check_gradients(model):
+        # runs ones through net e = f(x) with gradient enabled for x.
+        # ensures that for specific e_i only the correct fields of x receive
+        # a gradient
+        model = model.apply(setup_weights)
+        R = model.receptive_field
+        N = 2 * R
+        x = torch.ones(N).float().requires_grad_()
+        e = model.encode(x.view(1, 1, -1))[0].squeeze()
+        for i in range(N):
+            e[i].backward(inputs=x, create_graph=True, retain_graph=i < N)
+            # outputs at i have positive gradients (because of inputs=1 and the way weights are setup + tanh/sigmoid) wrt to inputs (i-R,i]
+            mask = torch.zeros(N, dtype=bool)
+            mask[max(0, i - R + 1) : (i + 1)] = True
+            assert all(x.grad.data[mask] > 0.0)
+            assert all(x.grad.data[~mask] == 0.0)
+            x.grad = None
+
+    # Standard model
+    model = wave.WaveNet(
+        quantization_levels=1, wave_dilations=[1, 2, 4], wave_channels=1
+    )
+    check_gradients(model)
+
+    # Model with larger input kernel size
+    model = wave.WaveNet(
+        quantization_levels=1,
+        wave_dilations=[1, 2, 4],
+        wave_channels=1,
+        input_kernel_size=3,
+    )
+    check_gradients(model)
+
+    # Model with repeated dilations
+    model = wave.WaveNet(
+        quantization_levels=1,
+        wave_dilations=[1, 2, 4, 1, 2],
+        wave_channels=1,
+        input_kernel_size=3,
+    )
+    check_gradients(model)

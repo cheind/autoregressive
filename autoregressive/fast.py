@@ -43,7 +43,8 @@ def create_initialized_queues(
 ) -> FastQueues:
     dev = layer_inputs[0].device
     dtype = layer_inputs[0].dtype
-    queues = create_zero_queues(model, device=dev, dtype=dtype)
+    B = layer_inputs[0].shape[0]
+    queues = create_zero_queues(model, device=dev, dtype=dtype, batch_size=B)
     for q, layer_input in zip(queues, layer_inputs):
         t_layer = layer_input.shape[-1]
         t_queue = q.shape[-1]

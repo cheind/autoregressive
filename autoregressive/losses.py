@@ -28,23 +28,20 @@ def rolling_nstep(
         else:
             roll_idx = roll_idx[:max_rolls]
 
-    _, layer_inputs, _ = model.encode(x, remove_left_invalid=False)
+    _, layer_inputs, _, _ = model.encode(x)
 
     all_roll_samples = []
     all_roll_logits = []
     for ridx in roll_idx:
         roll_obs = x[..., : (ridx + 1)]
-        roll_inputs = [
-            layer[..., : p + (ridx + 1)]
-            for layer, p in zip(layer_inputs, model.num_left_invalid)
-        ]
+        roll_inputs = [layer[..., : (ridx + 1)] for layer in layer_inputs]
         # Note, `remove_left_invalid=False` to be able to work with partially complete
         # input windows, each input layer is of different length. The length differences
         # stems from transformation of causally padded input through each layer. Since
         # Hence, observations until t, correspond to layer inputs until p+t, where p
         # is the number of left-invalid elements in the given input layer.
 
-        gen = wave.generate_fast(
+        gen = generators.generate_fast(
             model,
             roll_obs,
             sampler,

@@ -12,14 +12,14 @@ def identity_sampler(logits):
 def test_rolling_nstep():
     torch.manual_seed(123)
     model = wave.WaveNet(
-        dilations=[1, 2, 4],
+        wave_dilations=[1, 2, 4],
         quantization_levels=1,
         wave_channels=8,
     )
     assert model.receptive_field == 8
     seq = torch.rand(2, 1, 16)
     x = seq[..., :-1]
-    y = model(x)
+    y, _ = model(x)
 
     _, rolls_logits, yidx = losses.rolling_nstep(
         model,

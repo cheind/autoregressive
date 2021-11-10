@@ -74,14 +74,14 @@ def test_rolling_nstep():
 def test_rolling_nstep_ce():
     torch.manual_seed(123)
     model = wave.WaveNet(
-        dilations=[1, 2, 4],
+        wave_dilations=[1, 2, 4],
         quantization_levels=4,
         wave_channels=8,
     )
     assert model.receptive_field == 8
     seq = torch.rand(2, 4, 16)
     x = seq[..., :-1]
-    model_logprobs = F.log_softmax(model(x), 1)
+    model_logprobs = F.log_softmax(model(x)[0], 1)
     targets = torch.randint(0, 4, (2, 15))
 
     N = 2

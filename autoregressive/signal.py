@@ -2,13 +2,13 @@ __all__ = [
     "signal_minmax",
     "signal_normalize",
     "signal_quantize_midtread",
-    "signal_preprocess",
     "EncoderDecoder",
     "EncoderParams",
 ]
 
-from typing import Iterable, Union, Optional
+from typing import Iterable, Union
 import torch
+import torch.nn.functional as F
 import warnings
 import dataclasses
 
@@ -78,11 +78,17 @@ class EncoderDecoder:
         shift = self.enc_params.num_levels // 2 if self.enc_params.bin_shift else 0
         _, k = signal_quantize_midtread(x, bin_size)
         k = k + shift  # shift bin values, so that no negative index occurs.
+        if self.enc_params.one_hot:
+            k = F.one_hot(k, num_classes=self.enc_params.num_levels).permute(
+                1, 0
+            )  # (Q,T)
         return k
 
     def decode(self, k: torch.LongTensor) -> torch.FloatTensor:
         shift = self.enc_params.num_levels // 2 if self.enc_params.bin_shift else 0
         bin_size = 2.0 / (self.enc_params.num_levels - 1)
+        if self.enc_params.one_hot:
+            k = torch.argmax(k, dim=0)  # (T,)
         k = k - shift
         q = k * bin_size
         r = signal_normalize(

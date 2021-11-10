@@ -3,10 +3,14 @@ __all__ = [
     "signal_normalize",
     "signal_quantize_midtread",
     "signal_preprocess",
+    "EncoderDecoder",
+    "EncoderParams",
 ]
 
-from typing import Iterable, Union
+from typing import Iterable, Union, Optional
 import torch
+import warnings
+import dataclasses
 
 
 def signal_minmax(
@@ -37,7 +41,9 @@ def signal_normalize(
     return torch.clamp(xt, target_range[0], target_range[1])
 
 
-def signal_quantize_midtread(x: torch.Tensor, bin_size: float):
+def signal_quantize_midtread(
+    x: torch.Tensor, bin_size: float
+) -> tuple[torch.FloatTensor, torch.LongTensor]:
     """Quantize signal using uniform mid-tread method.
     The term mid-tread is due to the fact that values |x|<bin_size/2  are mapped to zero.
     """
@@ -46,16 +52,40 @@ def signal_quantize_midtread(x: torch.Tensor, bin_size: float):
     return q, k.long()
 
 
-def signal_preprocess(
-    x: torch.Tensor, num_bins: int, signal_range: tuple[float, float] = None
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Combines signal normalization and quantization."""
-    if signal_range is None:
-        signal_range = signal_minmax(x)
-    x = signal_normalize(x, source_range=signal_range, target_range=(-1.0, 1.0))
-    if num_bins % 2 == 0:
-        raise ValueError("Number of quantization levels should be odd.")
-    bin_size = 2.0 / (num_bins - 1)
-    q, k = signal_quantize_midtread(x, bin_size)
-    k = k + num_bins // 2  # shift bin values, so that no negative index occurs.
-    return q, k
+@dataclasses.dataclass
+class EncoderParams:
+    num_levels: int
+    input_range: tuple[float, float]
+    bin_shift: bool = True
+    one_hot: bool = False
+
+
+class EncoderDecoder:
+    """Performs encoding and decoding of signals using normalization/quantization"""
+
+    def __init__(self, params: EncoderParams):
+        self.enc_params = params
+
+    def encode(self, x: torch.Tensor) -> torch.LongTensor:
+        """Returns the bin indices of the encoded signal."""
+        signal_range = self.enc_params.input_range
+        if signal_range is None:
+            signal_range = signal_minmax(x)
+        x = signal_normalize(x, source_range=signal_range, target_range=(-1.0, 1.0))
+        if self.enc_params.num_levels % 2 == 0:
+            warnings.warn("Number of quantization levels should be odd.")
+        bin_size = 2.0 / (self.enc_params.num_levels - 1)
+        shift = self.enc_params.num_levels // 2 if self.enc_params.bin_shift else 0
+        _, k = signal_quantize_midtread(x, bin_size)
+        k = k + shift  # shift bin values, so that no negative index occurs.
+        return k
+
+    def decode(self, k: torch.LongTensor) -> torch.FloatTensor:
+        shift = self.enc_params.num_levels // 2 if self.enc_params.bin_shift else 0
+        bin_size = 2.0 / (self.enc_params.num_levels - 1)
+        k = k - shift
+        q = k * bin_size
+        r = signal_normalize(
+            q, source_range=(-1.0, 1.0), target_range=self.enc_params.input_range
+        )
+        return r

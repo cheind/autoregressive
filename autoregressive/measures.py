@@ -4,7 +4,7 @@ import torch
 def sample_entropy(
     x: torch.Tensor, m: int = 2, r: float = None, stride: int = 1, subsample: int = 1
 ):
-    """Returns the batched sample entropy of the given time series.
+    """Returns the (batched) sample entropy of the given time series.
 
     Sample entropy is a measure of complexity of sequences that can be related
     to predictability. Sample entropy (SE) is defined as the negative logarithm of
@@ -13,6 +13,10 @@ def sample_entropy(
     where C(X,m,r) is the number of partial vectors of length m in sequence X whose
     Chebyshev distance is less than r.
     Note, `0 <= SE >= -ln(2/[(T-m-1)(T-m)])`, where T is the sequence length
+
+    Based on
+    Richman, J. S., & Moorman, J. R. (2000). Physiological time-series analysis
+    using approximate entropy and sample entropy.
 
     Params
     ------
@@ -32,7 +36,6 @@ def sample_entropy(
     SE: (B,) tensor
         Sample entropy for each sequence
     """
-    # Batch-version based on https://en.wikipedia.org/wiki/Sample_entropy
     x = torch.atleast_2d(x)
     B, T = x.shape
     if r is None:

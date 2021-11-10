@@ -9,7 +9,7 @@ import torch.nn
 import torch.nn.functional as F
 import torch.nn.init
 
-from . import fast, losses, generators
+from . import fast, generators
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)

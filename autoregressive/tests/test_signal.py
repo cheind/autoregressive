@@ -31,8 +31,9 @@ def test_signal_quantize():
 
 
 def test_signal_encoder():
-    params = signal.EncoderParams(num_levels=5, input_range=(-2.0, 2.0))
-    ed = signal.EncoderDecoder(params)
+    ed = signal.EncoderDecoder(
+        num_levels=5, input_range=(-2.0, 2.0), bin_shift=True, one_hot=False
+    )
     x = torch.tensor([-1.0, -0.5, 0.0, 0.5, 1.0])
     k = ed.encode(x * 2)
     q = ed.decode(k)
@@ -44,8 +45,9 @@ def test_signal_encoder():
     assert torch.allclose(k, torch.tensor([1, 2, 2, 3, 3]))
     assert torch.allclose(q, torch.tensor([-1.0, 0.0, 0.0, 1.0, 1.0]))
 
-    params = signal.EncoderParams(num_levels=5, input_range=(-2.0, 2.0), one_hot=True)
-    ed = signal.EncoderDecoder(params)
+    ed = signal.EncoderDecoder(
+        num_levels=5, input_range=(-2.0, 2.0), bin_shift=True, one_hot=True
+    )
     x = torch.tensor([-1.0, -0.5, 0.0, 0.5])
     k = ed.encode(x * 2)
     assert k.shape == (5, 4)

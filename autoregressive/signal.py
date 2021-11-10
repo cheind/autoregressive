@@ -2,15 +2,12 @@ __all__ = [
     "signal_minmax",
     "signal_normalize",
     "signal_quantize_midtread",
-    "EncoderDecoder",
-    "EncoderParams",
 ]
 
 from typing import Iterable, Union
 import torch
 import torch.nn.functional as F
 import warnings
-import dataclasses
 
 
 def signal_minmax(
@@ -52,46 +49,43 @@ def signal_quantize_midtread(
     return q, k.long()
 
 
-@dataclasses.dataclass
-class EncoderParams:
-    num_levels: int
-    input_range: tuple[float, float]
-    bin_shift: bool = True
-    one_hot: bool = False
-
-
 class EncoderDecoder:
     """Performs encoding and decoding of signals using normalization/quantization"""
 
-    def __init__(self, params: EncoderParams):
-        self.enc_params = params
+    def __init__(
+        self,
+        num_levels: int,
+        input_range: tuple[float, float],
+        bin_shift: bool = True,
+        one_hot: bool = False,
+    ):
+        self.num_levels = num_levels
+        self.input_range = input_range
+        self.bin_shift = bin_shift
+        self.one_hot = one_hot
 
     def encode(self, x: torch.Tensor) -> torch.LongTensor:
         """Returns the bin indices of the encoded signal."""
-        signal_range = self.enc_params.input_range
+        signal_range = self.input_range
         if signal_range is None:
             signal_range = signal_minmax(x)
         x = signal_normalize(x, source_range=signal_range, target_range=(-1.0, 1.0))
-        if self.enc_params.num_levels % 2 == 0:
+        if self.num_levels % 2 == 0:
             warnings.warn("Number of quantization levels should be odd.")
-        bin_size = 2.0 / (self.enc_params.num_levels - 1)
-        shift = self.enc_params.num_levels // 2 if self.enc_params.bin_shift else 0
+        bin_size = 2.0 / (self.num_levels - 1)
+        shift = self.num_levels // 2 if self.bin_shift else 0
         _, k = signal_quantize_midtread(x, bin_size)
         k = k + shift  # shift bin values, so that no negative index occurs.
-        if self.enc_params.one_hot:
-            k = F.one_hot(k, num_classes=self.enc_params.num_levels).permute(
-                1, 0
-            )  # (Q,T)
+        if self.one_hot:
+            k = F.one_hot(k, num_classes=self.num_levels).permute(1, 0)  # (Q,T)
         return k
 
     def decode(self, k: torch.LongTensor) -> torch.FloatTensor:
-        shift = self.enc_params.num_levels // 2 if self.enc_params.bin_shift else 0
-        bin_size = 2.0 / (self.enc_params.num_levels - 1)
-        if self.enc_params.one_hot:
+        shift = self.num_levels // 2 if self.bin_shift else 0
+        bin_size = 2.0 / (self.num_levels - 1)
+        if self.one_hot:
             k = torch.argmax(k, dim=0)  # (T,)
         k = k - shift
         q = k * bin_size
-        r = signal_normalize(
-            q, source_range=(-1.0, 1.0), target_range=self.enc_params.input_range
-        )
+        r = signal_normalize(q, source_range=(-1.0, 1.0), target_range=self.input_range)
         return r

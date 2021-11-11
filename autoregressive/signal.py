@@ -20,8 +20,8 @@ def signal_minmax(
         fmax = torch.finfo(torch.float32).max
         lower, upper = fmax, -fmax
         for s in x:
-            lower = min(lower, x.min().item())
-            upper = max(upper, x.max().item())
+            lower = min(lower, s.min().item())
+            upper = max(upper, s.max().item())
         return lower, upper
 
 

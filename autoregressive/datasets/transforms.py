@@ -4,14 +4,6 @@ from .. import signal
 from .series_dataset import Series
 
 
-@dataclasses.dataclass
-class EncodeParams:
-    num_levels: int
-    input_range: tuple[float, float]
-    bin_shift: bool = True
-    one_hot: bool = False
-
-
 class Encode:
     """Transform to perform normalization and quantization of series data."""
 
@@ -31,6 +23,10 @@ class Encode:
 
     def __call__(self, series: Series) -> Series:
         series["x_k"] = self.encdec.encode(series["x"])
+        series["encode.num_levels"] = self.encdec.num_levels
+        series["encode.input_range"] = self.encdec.input_range
+        series["encode.bin_shift"] = self.encdec.bin_shift
+        series["encode.one_hot"] = self.encdec.one_hot
         return series
 
 

@@ -1,4 +1,5 @@
 __all__ = [
+    "BentLinesParams",
     "BentLinesDataset",
     "BentLinesDataModule",
 ]
@@ -9,6 +10,8 @@ import dataclasses
 import torch
 import torch.utils.data
 import pytorch_lightning as pl
+
+from autoregressive import signal
 
 from .series_dataset import SeriesDataset, Series
 from . import transforms, utils
@@ -80,7 +83,7 @@ class BentLinesDataModule(pl.LightningDataModule):
         self,
         train_params: BentLinesParams = BentLinesParams(),
         val_params: BentLinesParams = BentLinesParams(num_curves=256),
-        quantization_levels: int = 256,
+        quantization_levels: int = 17,
         batch_size: int = 64,
         num_workers: int = 0,
     ):
@@ -96,8 +99,6 @@ class BentLinesDataModule(pl.LightningDataModule):
         )
         self.train_ds = BentLinesDataset(train_params, transform=transform)
         self.val_ds = BentLinesDataset(val_params, transform=transform)
-        self.train__params = train_params
-        self.val_params = val_params
         self.quantization_levels = quantization_levels
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -130,17 +131,28 @@ def main():
     # dm = FSeriesDataModule(
     #     train_fseries_params=FSeriesParams(smoothness=0.75), batch_size=512
     # )
-    dm = BentLinesDataModule()
+    dm = BentLinesDataModule(quantization_levels=21)
 
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(
-        fig, 111, nrows_ncols=(5, 5), axes_pad=0.05, share_all=False, aspect=False
+        fig, 111, nrows_ncols=(2, 4), axes_pad=0.05, share_all=True, aspect=True
     )
 
     for ax, s in zip(grid, dm.train_ds):
-        # ax.step(s["t"], s["x"])
-        ax.scatter(s["t"], s["x"], s=1.0)
-        ax.set_ylim(0, 1.0)
+        ed = signal.EncoderDecoder(
+            s["encode.num_levels"],
+            s["encode.input_range"],
+            s["encode.bin_shift"],
+            s["encode.one_hot"],
+        )
+        ax.scatter(s["t"], s["x"], s=2.0, label="continous", c="k")
+        q = ed.decode(s["x_k"])
+        ax.step(s["t"], q, label="quantized", c="g")
+        ax.set_ylim(-30, 30)
+
+        print(s["x"][0])
+        print(s["x_k"][0])
+        print(q[0])
     plt.show()
 
 

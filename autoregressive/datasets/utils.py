@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 def fractional_dataset_split(
-    ds: SeriesDataset, splits: list[float]
+    ds: "SeriesDataset", splits: list[float]
 ) -> list[torch.utils.data.Subset]:
     idx = torch.arange(len(ds)).tolist()
     N = len(idx)

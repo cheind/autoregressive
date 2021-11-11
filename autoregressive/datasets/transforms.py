@@ -1,5 +1,5 @@
-__all__ = ["Encode", "EncodeParams", "chain_transforms"]
-import dataclasses
+__all__ = ["Encode", "chain_transforms"]
+
 from .. import signal
 from .series_dataset import Series
 

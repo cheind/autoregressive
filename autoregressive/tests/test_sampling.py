@@ -1,53 +1,61 @@
 import torch
 import numpy as np
-import math
+
+from scipy.stats import chi2
 
 from .. import sampling
 
 
-def _multinomial_prob(s: torch.Tensor, pi: torch.Tensor):
-    # See https://en.wikipedia.org/wiki/Multinomial_test
-
-    # approx for log(n!)
-    log_nfac = lambda n: sum(np.log(np.arange(1, n + 1)))
-    # log_nfac = (
-    #     lambda n: n * np.log(n)
-    #     - n
-    #     + np.log(n * (1 + 4 * n * (1 + 2 * n))) / 6
-    #     + np.log(math.pi) * 0.5
-    # )
-
-    N = s.shape[0]
-    k = len(pi)
-    # x = torch.histc(s.float(), bins=k, min=0, max=(k - 1)).int()
-    x = (torch.ones(10) * 20).long().numpy()
-    N = x.sum()
-    assert x.sum() == N
+def chi2_test(s: torch.Tensor, pi: torch.Tensor, p=0.05) -> bool:
+    """Returns true if the null hypothesis of bin-probabilities pi for observations s is accepted."""
+    # Number of categories
+    K = len(pi)
+    # Number of observations
+    N = len(s)
+    # Normalize
     pi = pi / pi.sum()
-    pi = pi.numpy().astype(float)
-    print(pi, x)
-
-    log_h0 = log_nfac(N) + sum(
-        [(x_i * np.log(pi_i) - log_nfac(x_i)) for x_i, pi_i in zip(x, pi)]
-    )
-    print([(x_i * np.log(pi_i) - log_nfac(x_i)) for x_i, pi_i in zip(x, pi)])
-    print(log_nfac(N))
-    # print([(log_nfac(x_i), x_i) for x_i in x])
-    return np.exp(log_h0)
-    # see https://en.wikipedia.org/wiki/Multinomial_test#cite_note-Read-Cressie-1988-1
+    # Count bin frequencies
+    x = torch.histc(s.float(), bins=K, min=0, max=(K - 1))  # Count observations
+    # Computed the expected frequencies under h0
+    expected = pi * N
+    print(x, expected)
+    # Compute the statistic which is approx. chi2 distributed.
+    chi2_value = ((x - expected) ** 2 / expected).sum()
+    # Compute the threshold
+    chi2_crit = chi2.ppf(1.0 - p, df=K - 1)
+    # If the probability of observing a chi2_value or something more extreme
+    # is less than p we reject h0
+    print(chi2_value.item(), chi2_crit)
+    return chi2_value <= chi2_crit
 
 
 def test_greedy_sampler():
     torch.manual_seed(123)
-    logits = torch.rand(2, 10, 10000)
-    # logits[:, :2, :] *= 1.2
+    logits = torch.rand(2, 10, 5000)
     samples = sampling.GreedySampler()(logits)
-    # assert samples.shape == (2, 500)
-    import matplotlib.pyplot as plt
+    assert samples.shape == (2, 5000)
+    assert chi2_test(samples.view(-1), torch.ones(10) * 0.1)
 
-    flat = samples.view(-1)
+    logits = torch.rand(2, 10, 10000)
+    logits[:, :2, :] += 0.1
+    samples = sampling.GreedySampler()(logits)
+    assert not chi2_test(samples.view(-1), torch.ones(10) * 0.1)
+    assert chi2_test(
+        samples.view(-1),
+        torch.tensor([0.18, 0.18, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08]),
+    )
 
-    print(_multinomial_prob(flat, torch.ones(10)))
 
-    # plt.hist(flat.int().numpy(), 10, density=True)
+def test_stochastic_sampler():
+    torch.manual_seed(123)
+    logits = torch.tensor([1.0, 2.0, 1.0, 1.0]).view(1, 4, 1).repeat(1, 1, 20000)
+    samples = sampling.StochasticSampler()(logits)
+    assert samples.shape == (1, 20000)
+    assert chi2_test(
+        samples.view(-1), torch.tensor([3500, 9400, 3500, 3500]) / 20000, p=0.01
+    )
+
+    # import matplotlib.pyplot as plt
+    # plt.hist(samples.view(-1).int().numpy(), 4)
+    # plt.legend()
     # plt.show()

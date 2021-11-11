@@ -34,4 +34,4 @@ class StochasticSampler(ObservationSampler):
     def __call__(self, logits: torch.Tensor) -> torch.Tensor:
         # Note, sampling from dists requires (*,Q) layout
         logits = logits.permute(0, 2, 1)
-        return D.Categorical(logits=logits).sample()  # (B,1)
+        return D.Categorical(logits=logits).sample()  # (*)

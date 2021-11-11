@@ -99,6 +99,41 @@ def test_wavenet_encode():
     e2, _, _, _ = wn.encode(x[..., 0:R])
     assert torch.allclose(e2[..., -1], e[..., R - 1])
 
+    # assert it works with sparse encoding as well
+    x = torch.tensor(
+        [
+            [0, 1, 3],
+            [2, 3, 1],
+        ]
+    )  # (B,T)
+    e, inputs, skips, outqueues = wn.encode(x, queues=None)
+    assert outqueues is None
+    assert e.shape == (2, 8, 3)
+    assert len(inputs) == len(skips) == 1 + 3  # +1for input layer
+    assert all([s.shape == (2, 8, 3) for s in skips])
+    assert all([s.shape == (2, 8, 3) for s in inputs[1:]])
+    assert inputs[0].shape == (2, 4, 3)
+    assert torch.allclose(
+        inputs[0][0],
+        torch.tensor(
+            [
+                [1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 0, 1],
+            ]
+        ).T.float(),
+    )
+    assert torch.allclose(
+        inputs[0][1],
+        torch.tensor(
+            [
+                [0, 0, 1, 0],
+                [0, 0, 0, 1],
+                [0, 1, 0, 0],
+            ]
+        ).T.float(),
+    )
+
 
 def test_coverage_leakage():
     """Check correct inputs are accessed and no data is leaked from the future"""

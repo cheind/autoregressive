@@ -198,11 +198,17 @@ class WaveNet(pl.LightningModule):
         self.save_hyperparameters()
 
     def encode(self, x, queues: fast.FastQueues = None):
+        if x.dim() == 2:
+            # sparse encoding (B,T) -> dense encoding (B,Q,T)
+            x = F.one_hot(x, num_classes=self.quantization_levels)  # (B,T,Q)
+            x = x.permute(0, 2, 1).float()  # (B,Q,T)
+
+        if queues is None:
+            queues = [None] * len(self.layers)
+
         skips = []
         layer_inputs = []
         out_queues = []
-        if queues is None:
-            queues = [None] * len(self.layers)
 
         for layer, q in zip(self.layers, queues):
             layer: WaveLayerBase

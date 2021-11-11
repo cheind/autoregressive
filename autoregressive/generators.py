@@ -4,11 +4,14 @@ import warnings
 from typing import TYPE_CHECKING, Iterator, List, Tuple
 
 import torch
+from torch.nn import init
+import torch.nn.functional as F
 
-from . import fast
+from . import fast, compression
 
 if TYPE_CHECKING:
-    from .wave import ObservationSampler, WaveNet
+    from .wave import WaveNet
+    from .sampling import ObservationSampler
 
 WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
 
@@ -18,15 +21,18 @@ def generate(
     initial_obs: torch.Tensor,
     sampler: "ObservationSampler",
 ) -> WaveGenerator:
+    initial_obs = compression.to_one_hot(
+        initial_obs, num_classes=model.quantization_levels
+    )
     B, Q, T = initial_obs.shape
+    R = model.receptive_field
     if T < 1:
         raise ValueError("Need at least one observation to bootstrap generation.")
 
-    # We need to track up to the last n samples,
-    # where n equals the receptive field of the model
-    R = model.receptive_field
+    # We need to track up to the last R samples
     history = initial_obs.new_zeros((B, Q, R))
     t = min(R, T)
+    # Populate history with recent obs
     history[..., :t] = initial_obs[..., -t:]
 
     while True:
@@ -38,7 +44,7 @@ def generate(
         roll = int(t == R)
         history = history.roll(-roll, -1)  # no-op as long as history is not full
         t = min(t + 1, R)
-        history[..., t - 1 : t] = s
+        history[..., t - 1 : t] = compression.to_one_hot(s, num_classes=Q)
 
 
 def generate_fast(
@@ -47,6 +53,9 @@ def generate_fast(
     sampler: "ObservationSampler",
     layer_inputs: List[torch.Tensor] = None,
 ) -> WaveGenerator:
+    # In case we have compressed input, we convert to one-hot style.
+    Q = model.quantization_levels
+    initial_obs = compression.to_one_hot(initial_obs, num_classes=Q)
     B, _, T = initial_obs.shape
     if T < 1:
         raise ValueError("Need at least one observation to bootstrap.")
@@ -69,9 +78,9 @@ def generate_fast(
     obs = initial_obs[..., -1:]  # (B,Q,1)
     while True:
         logits, queues = model.forward(obs, queues)
-        s = sampler(logits)  # (B,Q,1)
+        s = sampler(logits)  # (B,Q,1) or (B,Q)
         yield s, logits
-        obs = s
+        obs = compression.to_one_hot(s, num_classes=Q)  # (B,Q,1)
 
 
 def slice_generator(

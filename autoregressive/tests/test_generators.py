@@ -1,5 +1,5 @@
 import torch
-from .. import wave, generators
+from .. import wave, generators, sampling
 
 
 def identity_sampler(logits):
@@ -70,6 +70,55 @@ def test_generators():
     yslow_samples, _ = generators.slice_generator(gslow, 60)
     yfast_samples, _ = generators.slice_generator(gfast, 60)
     assert yslow_samples.shape == (1, 1, 60)
+    assert torch.allclose(yslow_samples, yfast_samples, atol=1e-4)
+
+
+@torch.no_grad()
+def test_compressed_generators():
+    # Pretty useless to use quantization level of 1, but we use floats in the tests.
+    net = wave.WaveNet(
+        quantization_levels=4,
+        wave_channels=8,
+        input_kernel_size=3,
+        wave_dilations=[1, 2, 4],
+    )
+    R = net.receptive_field
+    assert R == 10
+    x = torch.randint(0, 4, (1, 16))  # (B,T)
+    y, _ = net(x)
+    assert y.shape == (1, 4, 16)
+
+    # # Next, we compare the initial generator prediction to net output y. This can be
+    # # done as generators produce as first prediction the net result of first observation.
+    for i in range(16):
+        gslow = generators.generate(
+            net, x[..., : (i + 1)], sampler=sampling.GreedySampler()
+        )
+        gfast = generators.generate_fast(
+            net, x[..., : (i + 1)], sampler=sampling.GreedySampler()
+        )
+        yslow_samples, yslow_logits = generators.slice_generator(gslow, 1)  # predict 1
+        yfast_samples, yfast_logits = generators.slice_generator(gfast, 1)  # predict 1
+        assert torch.allclose(yslow_logits.squeeze(), y[..., i].squeeze(), atol=1e-4)
+        assert torch.allclose(yfast_logits.squeeze(), y[..., i].squeeze(), atol=1e-4)
+        assert torch.allclose(
+            yslow_samples.squeeze(), y[..., i].argmax(1).squeeze(), atol=1e-4
+        )
+        assert torch.allclose(
+            yfast_samples.squeeze(), y[..., i].argmax(1).squeeze(), atol=1e-4
+        )
+
+    # # Next, we compare the generators for equality when predicting more than
+    # # one element, given a single observation (i.e empty queues)
+    gslow = generators.generate(net, x[..., :1], sampler=sampling.GreedySampler())
+    gfast = generators.generate_fast(net, x[..., :1], sampler=sampling.GreedySampler())
+    yslow_samples, yslow_logits = generators.slice_generator(gslow, 60)
+    yfast_samples, yfast_logits = generators.slice_generator(gfast, 60)
+    assert yslow_logits.shape == (1, 4, 60)
+    assert yfast_logits.shape == (1, 4, 60)
+    assert yslow_samples.shape == (1, 60)
+    assert yfast_samples.shape == (1, 60)
+    assert torch.allclose(yslow_logits, yfast_logits, atol=1e-4)
     assert torch.allclose(yslow_samples, yfast_samples, atol=1e-4)
 
 

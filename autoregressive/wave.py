@@ -9,15 +9,10 @@ import torch.nn
 import torch.nn.functional as F
 import torch.nn.init
 
-from . import fast, generators
+from . import fast, generators, sampling, compression
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
-
-
-class ObservationSampler(Protocol):
-    def __call__(self, logits: torch.Tensor) -> torch.Tensor:
-        ...
 
 
 def wave_init_weights(m):
@@ -198,11 +193,7 @@ class WaveNet(pl.LightningModule):
         self.save_hyperparameters()
 
     def encode(self, x, queues: fast.FastQueues = None):
-        if x.dim() == 2:
-            # sparse encoding (B,T) -> dense encoding (B,Q,T)
-            x = F.one_hot(x, num_classes=self.quantization_levels)  # (B,T,Q)
-            x = x.permute(0, 2, 1).float()  # (B,Q,T)
-
+        x = compression.to_one_hot(x, self.quantization_levels)
         if queues is None:
             queues = [None] * len(self.layers)
 
@@ -227,7 +218,7 @@ class WaveNet(pl.LightningModule):
         return x, layer_inputs, skips, out_queues
 
     def forward(self, x, queues: fast.FastQueues = None):
-        # x (B,Q,T) or (B,Q,1)
+        # x (B,Q,T) or (B,T)
         encoded, _, skips, outqueues = self.encode(x, queues=queues)
         return self.logits(encoded, skips), outqueues
 
@@ -254,8 +245,8 @@ class WaveNet(pl.LightningModule):
         }
 
     def training_step(self, batch, batch_idx):
-        targets: torch.Tensor = batch["y"][..., 1:]  # (B,T)
-        inputs: torch.Tensor = batch["x"][..., :-1]  # (B,Q,T)
+        targets: torch.Tensor = batch["x_k"][..., 1:]  # (B,T)
+        inputs: torch.Tensor = batch["x_k"][..., :-1]  # (B,T)
         logits = self(inputs)
 
         r = self.receptive_field if self.train_opts.skip_partial else 0
@@ -265,13 +256,13 @@ class WaveNet(pl.LightningModule):
         return {"loss": loss, "train_loss": loss.detach()}
 
     def validation_step(self, batch, batch_idx):
-        inputs: torch.Tensor = batch["x"][..., :-1]
-        targets: torch.Tensor = batch["y"][..., 1:]
+        inputs: torch.Tensor = batch["x_k"][..., :-1]
+        targets: torch.Tensor = batch["x_k"][..., 1:]
 
         _, roll_logits, roll_idx = generators.rolling_origin(
             self,
-            self.create_sampler(greedy=True),
-            inputs,
+            sampler=sampling.GreedySampler(),
+            obs=inputs,
             horizon=self.train_opts.val_ro_horizon,
             num_origins=self.train_opts.val_ro_num_origins,
             random_origins=True,
@@ -288,23 +279,8 @@ class WaveNet(pl.LightningModule):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         self.log("val_loss_epoch", avg_loss, prog_bar=True)
 
-    def create_sampler(self, greedy: bool = False) -> ObservationSampler:
-        def greedy_sampler(logits):
-            # logits (B,Q,1)
-            amax = torch.argmax(logits, dim=1, keepdim=False)  # (B,1)
-            oh = F.one_hot(amax, num_classes=self.quantization_levels)  # (B,1,Q)
-            return oh.permute(0, 2, 1).float()  # (B,Q,1)
-
-        def stochastic_sampler(logits):
-            # logits (B,Q,1)
-            bins = D.Categorical(logits=logits.permute(0, 2, 1)).sample()  # (B,1)
-            oh = F.one_hot(bins, num_classes=self.quantization_levels)  # (B,1,Q)
-            return oh.permute(0, 2, 1).float()  # (B,Q,1)
-
-        if greedy:
-            return greedy_sampler
-        else:
-            return stochastic_sampler
+    def create_sampler(self) -> sampling.ObservationSampler:
+        return sampling.StochasticSampler()
 
 
 def _rolling_origin_ce(

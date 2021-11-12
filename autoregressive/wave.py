@@ -247,7 +247,7 @@ class WaveNet(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         targets: torch.Tensor = batch["x_k"][..., 1:]  # (B,T)
         inputs: torch.Tensor = batch["x_k"][..., :-1]  # (B,T)
-        logits = self(inputs)
+        logits, _ = self(inputs)
 
         r = self.receptive_field if self.train_opts.skip_partial else 0
         loss = F.cross_entropy(logits[..., r:], targets[..., r:])

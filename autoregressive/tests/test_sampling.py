@@ -18,7 +18,6 @@ def _chi2test(s: torch.Tensor, pi: torch.Tensor, p=0.05) -> bool:
     x = torch.histc(s.float(), bins=K, min=0, max=(K - 1))  # Count observations
     # Computed the expected frequencies under h0
     expected = pi * N
-    print(x, expected)
     # Compute the statistic which (approx. chi2 distributed)
     chi2_value = ((x - expected) ** 2 / expected).sum()
     # Compute the p-value, i.e P(X >= chi2_value)

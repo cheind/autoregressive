@@ -95,7 +95,7 @@ class BentLinesDataModule(pl.LightningDataModule):
             num_levels=quantization_levels,
             input_range=signal_range,
             bin_shift=True,
-            one_hot=True,
+            one_hot=False,
         )
         self.train_ds = BentLinesDataset(train_params, transform=transform)
         self.val_ds = BentLinesDataset(val_params, transform=transform)

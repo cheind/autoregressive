@@ -259,16 +259,21 @@ class WaveNet(pl.LightningModule):
         inputs: torch.Tensor = batch["x_k"][..., :-1]
         targets: torch.Tensor = batch["x_k"][..., 1:]
 
-        _, roll_logits, roll_idx = generators.rolling_origin(
-            self,
-            sampler=sampling.GreedySampler(),
-            obs=inputs,
-            horizon=self.train_opts.val_ro_horizon,
-            num_origins=self.train_opts.val_ro_num_origins,
-            random_origins=True,
-            skip_partial=self.train_opts.skip_partial,
-        )
-        loss = _rolling_origin_ce(roll_logits, roll_idx, targets)
+        if self.train_opts.val_ro_horizon > 1:
+            _, roll_logits, roll_idx = generators.rolling_origin(
+                self,
+                sampler=sampling.GreedySampler(),
+                obs=inputs,
+                horizon=self.train_opts.val_ro_horizon,
+                num_origins=self.train_opts.val_ro_num_origins,
+                random_origins=True,
+                skip_partial=self.train_opts.skip_partial,
+            )
+            loss = _rolling_origin_ce(roll_logits, roll_idx, targets)
+        else:
+            logits, _ = self(inputs)
+            r = self.receptive_field if self.train_opts.skip_partial else 0
+            loss = F.cross_entropy(logits[..., r:], targets[..., r:])
         return {"val_loss": loss}
 
     def training_epoch_end(self, outputs) -> None:

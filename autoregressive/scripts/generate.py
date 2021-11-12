@@ -110,15 +110,15 @@ def main():
         )
 
     t0 = time.time()
-
     trajs, _ = generators.slice_generator(g, stop=steps)  # (B,1,T)
     trajs = trajs.squeeze(1).cpu()
     tn = torch.arange(R, R + steps, 1) * dm.dt
-    tx = torch.arange(0, R + steps, 1) * dm.dt
+
     print(f"Generation took {(time.time()-t0):.3f} secs")
 
     # Plot
     for idx, (ax, s) in enumerate(zip(grid, curves)):
+        tx = torch.arange(0, min(R + steps, len(s["t"])), 1) * dm.dt
         ed = signal.EncoderDecoder(
             s["encode.num_levels"],
             s["encode.input_range"],

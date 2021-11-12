@@ -99,6 +99,8 @@ class BentLinesDataModule(pl.LightningDataModule):
         )
         self.train_ds = BentLinesDataset(train_params, transform=transform)
         self.val_ds = BentLinesDataset(val_params, transform=transform)
+        self.train_params = train_params
+        self.val_params = val_params
         self.quantization_levels = quantization_levels
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -121,7 +123,7 @@ class BentLinesDataModule(pl.LightningDataModule):
         )
 
     def __str__(self) -> str:
-        return f"BentLinesDataModule(train_params={self.train__params}, val_params={self.val_params})"
+        return f"BentLinesDataModule(train_params={self.train_params}, val_params={self.val_params})"
 
 
 def main():

@@ -13,9 +13,9 @@ import torch
 import torch.utils.data
 import pytorch_lightning as pl
 
-from .common import SeriesDataset
+from .series_dataset import SeriesDataset, Series
+from . import transforms, utils
 
-Sample = Dict[str, Any]
 FloatOrFloatRange = Union[float, Tuple[float, float]]
 IntOrIntRange = Union[int, Tuple[int, int]]
 
@@ -84,6 +84,7 @@ class FSeriesParams:
     lineartrend_range: FloatOrFloatRange = 0.0
     smoothness: float = 0.0
     seed: int = None
+    include_params: bool = False
 
 
 class FSeriesDataset(SeriesDataset):
@@ -92,7 +93,7 @@ class FSeriesDataset(SeriesDataset):
     def __init__(
         self,
         params: FSeriesParams,
-        transform: Callable[[Sample], Sample] = None,
+        transform: Callable[[Series], Series] = None,
     ) -> None:
         super().__init__()
         eps = torch.finfo(torch.float32).eps
@@ -124,14 +125,14 @@ class FSeriesDataset(SeriesDataset):
     def __len__(self):
         return self.num_curves
 
-    def __getitem__(self, index) -> Sample:
+    def __getitem__(self, index) -> Series:
         """Returns a sample curve."""
         p = self.curve_params[index]
         t = torch.arange(p["tstart"], self.dt * self.num_tsamples, self.dt)
         n = torch.arange(p["terms"]) + 1
         x = fseries_amp_phase(p["bias"], n, p["coeffs"], p["phase"], p["period"], t)[0]
         x += t * p["lineark"]
-        sample = {"x": x, "xo": x.clone(), "t": t}
+        sample = {"x": x, "t": t}
         if self.include_params:
             sample["p"] = p
         if self.transform is not None:
@@ -171,22 +172,35 @@ class FSeriesDataset(SeriesDataset):
 class FSeriesDataModule(pl.LightningDataModule):
     def __init__(
         self,
+        quantization_levels: int = 127,
         batch_size: int = 64,
         num_workers: int = 0,
-        train_fseries_params: FSeriesParams = FSeriesParams(smoothness=0.75),
-        val_fseries_params: FSeriesParams = FSeriesParams(
-            num_curves=512, smoothness=0.75
-        ),
+        train_params: FSeriesParams = FSeriesParams(smoothness=0.75),
+        val_params: FSeriesParams = None,
     ):
         super().__init__()
-        self.train_fseries_params = train_fseries_params
-        self.val_fseries_params = val_fseries_params
-        self.train_ds = FSeriesDataset(train_fseries_params)
-        self.val_ds = FSeriesDataset(val_fseries_params)
+
+        if val_params is None:
+            val_params = dataclasses.replace(train_params)
+            val_params.num_curves = min(val_params.num_curves, 512)
+
+        train_ds = FSeriesDataset(train_params)
+        val_ds = FSeriesDataset(val_params)
+        signal_range = utils.datasets_minmax(train_ds, val_ds)
+        transform = transforms.Encode(
+            num_levels=quantization_levels,
+            input_range=signal_range,
+            bin_shift=True,
+            one_hot=False,
+        )
+        self.train_ds = FSeriesDataset(train_params, transform=transform)
+        self.val_ds = FSeriesDataset(val_params, transform=transform)
+        self.quantization_levels = quantization_levels
+        self.train_params = train_params
+        self.val_params = val_params
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.dt = self.train_ds.dt
-        self.save_hyperparameters()
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
@@ -205,7 +219,7 @@ class FSeriesDataModule(pl.LightningDataModule):
         )
 
     def __str__(self) -> str:
-        return f"train_params: {self.train_fseries_params}\n val_params:{self.val_fseries_params}"
+        return f"train_params: {self.train_params}\n val_params:{self.val_params}"
 
 
 def square_wave():

@@ -1,5 +1,6 @@
-__all__ = ["Encode", "chain_transforms"]
+__all__ = ["Encode", "Noise", "chain_transforms"]
 
+import torch
 from .. import signal
 from .series_dataset import Series
 
@@ -27,6 +28,15 @@ class Encode:
         series["encode.input_range"] = self.encdec.input_range
         series["encode.bin_shift"] = self.encdec.bin_shift
         series["encode.one_hot"] = self.encdec.one_hot
+        return series
+
+
+class Noise:
+    def __init__(self, scale: float = 1e-2):
+        self.scale = scale
+
+    def __call__(self, series: Series) -> Series:
+        series["x"] += torch.randn_like(series["x"]) * self.scale
         return series
 
 

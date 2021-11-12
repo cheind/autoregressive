@@ -105,7 +105,7 @@ def rolling_origin(
     skip_partial: bool = True,
 ):
     # See https://cran.r-project.org/web/packages/greybox/vignettes/ro.html
-    (_, _, T), R = obs.shape, model.receptive_field
+    T, R = obs.shape[-1], model.receptive_field
     if horizon == 1:
         warnings.warn(
             "Consider using wavnet.forward(), which performs a horizon 1 rolling origin more efficiently"

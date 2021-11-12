@@ -7,6 +7,7 @@ from pytorch_lightning.callbacks import (
     ModelCheckpoint,
     EarlyStopping,
 )
+from pathlib import Path
 
 from .. import wave
 
@@ -19,7 +20,8 @@ def cli_main():
         def after_fit(self):
             ckpt = [c for c in self.trainer.callbacks if isinstance(c, ModelCheckpoint)]
             if len(ckpt) > 0:
-                _logger.info(f"Best val. model path: {ckpt[0].best_model_path}")
+                p = Path(ckpt[0].best_model_path)
+                _logger.info(f"Best val. model path: {p}")
             return super().after_fit()
 
         def add_arguments_to_parser(self, parser):
@@ -62,8 +64,6 @@ def cli_main():
 
 if __name__ == "__main__":
     cli_main()
-    # python -m autoregressive.scripts.train --data autoregressive.datasets.BentLinesDataModule --print_config > config.yaml
-    # python -m autoregressive.trainer --model autoregressive.models.RegressionWaveNet --data autoregressive.datasets.AEPHourlyDataModule --print_config > config.yaml
-    # python -m autoregressive.trainer --model autoregressive.variants.QuantizedWaveNet --data.num_bins 32 --print_config > config.yaml
-    # python -m autoregressive.trainer --model autoregressive.trainer.LitBimodalWaveNet --print_config > bimodal.yaml
-    # python -m autoregressive.trainer --config config.yaml
+    # python -m autoregressive.scripts.train --data autoregressive.datasets.BentLinesDataModule --print_config > bentlines_config.yaml
+    # python -m autoregressive.scripts.train --data autoregressive.datasets.FSeriesDataModule --print_config > fseries_config.yaml
+    # python -m autoregressive.scripts.train --config config.yaml

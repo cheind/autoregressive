@@ -82,8 +82,10 @@ def main():
 
     # Prepare observations. We batch all observations and then repeat
     # these observations for the number of trajectories
-    obs = torch.stack([c["x"] for c in curves], 0)  # (B,Q,T)
-    obs = obs.repeat(cfg["num_traj"], 1, 1).to(dev)
+    obs = torch.stack([c["x_k"] for c in curves], 0)  # (B,T) or (B,Q,T)
+    rep = [1] * obs.dim()
+    rep[0] = cfg["num_traj"]
+    obs = obs.repeat(*rep).to(dev)
 
     # Generate. Note, we leave the last obs out so the first item predicted
     # overlaps the last observation and we hence get a smooth plot
@@ -103,12 +105,20 @@ def main():
     t0 = time.time()
     trajs, _ = generators.slice_generator(g, stop=cfg["num_steps"])  # (B,1,T)
     trajs = trajs.squeeze(1).cpu()
-    tn = torch.arange(S, S + cfg["num_steps"], 1) * dm.dt
+    tn = torch.arange(S, S + cfg["num_steps"], 1)
     print(f"Generation took {(time.time()-t0):.3f} secs")
 
     # Plot
     for idx, (ax, s) in enumerate(zip(grid, curves)):
-        x, t = s["x"], s["t"]
+        x = s["x_k"]
+        ax.step(
+            torch.arange(0, len(x), 1),
+            x,
+            c="k",
+            linewidth=0.5,
+            label="input",
+            linestyle="--",
+        )
         # ax.step(t, xo, c="k", linewidth=0.5, label="input", linestyle="--")
         # ax.scatter(
         #     t, x.argmax(0), c="k", s=10, linewidth=0.5, label="input", linestyle="--"
@@ -117,7 +127,7 @@ def main():
         for tidx, xn in enumerate(trajs[idx::num_curves]):
             # Note, above we step with num_curves to get all trajectories
             # for this axis. Related to repeat statement above.
-            ax.step(tn, xn.argmax(0), label="generated" if tidx == 0 else "")
+            ax.step(tn, xn, label="generated" if tidx == 0 else "")
         # ax.set_ylim(-3, 3)
 
     handles, labels = ax.get_legend_handles_labels()

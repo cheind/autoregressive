@@ -7,7 +7,7 @@ import torch
 from torch.nn import init
 import torch.nn.functional as F
 
-from . import fast, compression
+from . import fast, encoding
 
 if TYPE_CHECKING:
     from .wave import WaveNet
@@ -21,8 +21,8 @@ def generate(
     initial_obs: torch.Tensor,
     sampler: "ObservationSampler",
 ) -> WaveGenerator:
-    initial_obs = compression.to_one_hot(
-        initial_obs, num_classes=model.quantization_levels
+    initial_obs = encoding.one_hotf(
+        initial_obs, quantization_levels=model.quantization_levels
     )
     B, Q, T = initial_obs.shape
     R = model.receptive_field
@@ -44,7 +44,7 @@ def generate(
         roll = int(t == R)
         history = history.roll(-roll, -1)  # no-op as long as history is not full
         t = min(t + 1, R)
-        history[..., t - 1 : t] = compression.to_one_hot(s, num_classes=Q)
+        history[..., t - 1 : t] = encoding.one_hotf(s, quantization_levels=Q)
 
 
 def generate_fast(
@@ -56,7 +56,7 @@ def generate_fast(
     # In case we have compressed input, we convert to one-hot style.
     Q = model.quantization_levels
     R = model.receptive_field
-    initial_obs = compression.to_one_hot(initial_obs, num_classes=Q)
+    initial_obs = encoding.one_hotf(initial_obs, quantization_levels=Q)
     B, _, T = initial_obs.shape
     if T < 1:
         raise ValueError("Need at least one observation to bootstrap.")
@@ -83,7 +83,7 @@ def generate_fast(
         logits, queues = model.forward(obs, queues)
         s = sampler(logits)  # (B,Q,1) or (B,Q)
         yield s, logits
-        obs = compression.to_one_hot(s, num_classes=Q)  # (B,Q,1)
+        obs = encoding.one_hotf(s, quantization_levels=Q)  # (B,Q,1)
 
 
 def slice_generator(

@@ -9,7 +9,7 @@ import torch.nn
 import torch.nn.functional as F
 import torch.nn.init
 
-from . import fast, generators, sampling, compression
+from . import fast, generators, sampling, encoding
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -193,7 +193,7 @@ class WaveNet(pl.LightningModule):
         self.save_hyperparameters()
 
     def encode(self, x, queues: fast.FastQueues = None):
-        x = compression.to_one_hot(x, self.quantization_levels)
+        x = encoding.one_hotf(x, quantization_levels=self.quantization_levels)
         if queues is None:
             queues = [None] * len(self.layers)
 

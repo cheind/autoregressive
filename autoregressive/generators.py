@@ -55,6 +55,7 @@ def generate_fast(
 ) -> WaveGenerator:
     # In case we have compressed input, we convert to one-hot style.
     Q = model.quantization_levels
+    R = model.receptive_field
     initial_obs = compression.to_one_hot(initial_obs, num_classes=Q)
     B, _, T = initial_obs.shape
     if T < 1:
@@ -68,13 +69,15 @@ def generate_fast(
             batch_size=B,
         )
     else:
+        start = max(0, T - R)
+        end = T - 1
         if layer_inputs is None:
-            _, layer_inputs, _, _ = model.encode(initial_obs[..., :-1])
-            # TODO we should encode only necessary inputs
+            _, layer_inputs, _, _ = model.encode(initial_obs[..., start:end])
         else:
-            layer_inputs = [inp[..., :-1] for inp in layer_inputs]
+            layer_inputs = [inp[..., start:end] for inp in layer_inputs]
+        # create queues
         queues = fast.create_initialized_queues(model=model, layer_inputs=layer_inputs)
-    # generate
+    # start generating beginning with most recent observation
     obs = initial_obs[..., -1:]  # (B,Q,1)
     while True:
         logits, queues = model.forward(obs, queues)

@@ -24,7 +24,9 @@ class SeriesDataset(torch.utils.data.Dataset):
 
 
 def series_collate(batch):
-    """Default collate fn for series datasets"""
+    """Default collate fn for series datasets.
+    Applies default collate to series, but keeps meta info as is.
+    """
     series, meta = zip(*batch)
     return default_collate(series), meta
 

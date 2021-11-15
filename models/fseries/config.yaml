@@ -109,5 +109,5 @@ data:
       lineartrend_range: 0.0
       smoothness: 0.75
       seed: null
-      include_params: false
+      noise_scale: 0.0
     val_params: null

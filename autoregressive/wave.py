@@ -245,8 +245,9 @@ class WaveNet(pl.LightningModule):
         }
 
     def training_step(self, batch, batch_idx):
-        targets: torch.Tensor = batch["x_k"][..., 1:]  # (B,T)
-        inputs: torch.Tensor = batch["x_k"][..., :-1]  # (B,T)
+        series, meta = batch
+        targets: torch.Tensor = series["x"][..., 1:]  # (B,T)
+        inputs: torch.Tensor = series["x"][..., :-1]  # (B,T)
         logits, _ = self(inputs)
 
         r = self.receptive_field if self.train_opts.skip_partial else 0
@@ -256,8 +257,9 @@ class WaveNet(pl.LightningModule):
         return {"loss": loss, "train_loss": loss.detach()}
 
     def validation_step(self, batch, batch_idx):
-        inputs: torch.Tensor = batch["x_k"][..., :-1]
-        targets: torch.Tensor = batch["x_k"][..., 1:]
+        series, meta = batch
+        inputs: torch.Tensor = series["x"][..., :-1]
+        targets: torch.Tensor = series["x"][..., 1:]
 
         if self.train_opts.val_ro_horizon > 1:
             _, roll_logits, roll_idx = generators.rolling_origin(

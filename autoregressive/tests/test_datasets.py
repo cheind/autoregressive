@@ -3,7 +3,7 @@ import torch
 from .. import datasets
 
 
-def test_bentlines_dataset():
+def xtest_bentlines_dataset():
     params = datasets.BentLinesParams(seed=123, num_tsamples=100, dt=0.1)
     ds = datasets.BentLinesDataset(params)
     s = ds[0]

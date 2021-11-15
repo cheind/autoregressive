@@ -34,6 +34,7 @@ class FSeriesParams:
     phase_range: FloatOrFloatRange = (-PI, PI)
     lineartrend_range: FloatOrFloatRange = 0.0
     smoothness: float = 0.0
+    noise_scale: float = 0.0
     seed: int = None
 
 
@@ -65,6 +66,7 @@ class FSeriesDataset(sd.SeriesDataset):
         self.dt = params.dt
         self.smoothness = params.smoothness
         self.transform = transform
+        self.noise_scale = params.noise_scale
         if params.seed is None:
             rng = torch.default_generator
         else:
@@ -83,6 +85,7 @@ class FSeriesDataset(sd.SeriesDataset):
             meta["bias"], n, meta["coeffs"], meta["phase"], meta["period"], t
         )[0]
         x += t * meta["lineark"]
+        x += torch.randn_like(x) * self.noise_scale
         series = {"x": x}
         if self.transform is not None:
             series, meta = self.transform((series, meta))

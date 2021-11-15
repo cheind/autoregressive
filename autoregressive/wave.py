@@ -1,10 +1,9 @@
 import dataclasses
 import logging
-from typing import Iterable, Protocol
+from typing import Iterable
 
 import pytorch_lightning as pl
 import torch
-import torch.distributions as D
 import torch.nn
 import torch.nn.functional as F
 import torch.nn.init

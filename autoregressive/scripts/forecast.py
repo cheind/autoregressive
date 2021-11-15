@@ -79,7 +79,6 @@ def main():
 
     cfg = cli.config
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    dm = cli.datamodule
     model = load_model(cli).to(dev)
     sampler = model.create_sampler()
     obs = create_obs(cli).to(dev)

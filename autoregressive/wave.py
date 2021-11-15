@@ -60,7 +60,7 @@ class WaveNetLayer(WaveLayerBase):
         self.wave_channels = wave_channels
         self.conv_dilation = torch.nn.Conv1d(
             wave_channels,
-            2 * wave_channels,  # See PixelCNN, we stack W f,k and W g,k
+            2 * wave_channels,  # We stack W f,k and W g,k, similar to PixelCNN
             kernel_size=kernel_size,
             dilation=dilation,
         )

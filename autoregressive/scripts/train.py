@@ -32,9 +32,10 @@ def cli_main():
             )
 
     ckpt = ModelCheckpoint(
-        monitor="val_loss_epoch",
-        filename="wavenet-{epoch:02d}-{val_loss_epoch:.4f}",
+        monitor="val_acc_epoch",
+        filename="wavenet-{epoch:02d}-{val_acc_epoch:.4f}",
         save_top_k=3,
+        mode="max",
     )
     lrm = LearningRateMonitor(logging_interval="step")
     # es = EarlyStopping(

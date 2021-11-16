@@ -64,29 +64,30 @@ def sample_entropy(
 
 
 def cross_entropy_ro(
-    roll_logits: torch.Tensor, roll_idx: torch.Tensor, targets: torch.Tensor
+    roll_logits: torch.Tensor,
+    roll_idx: torch.Tensor,
+    targets: torch.Tensor,
+    reduction="mean",
 ) -> float:
     """Cross entropy over rolling origin results"""
-    H = roll_logits.shape[-1]  # horizon
-    sum_loss = 0.0
-    num_pred = 0
-    for logits, idx in zip(roll_logits, roll_idx):
-        roll_targets = targets[..., idx : idx + H]
-        ce = F.cross_entropy(logits, roll_targets, reduction="sum")
-        sum_loss = sum_loss + ce
-        num_pred = num_pred + roll_targets.numel()
-    return sum_loss / num_pred
+    # roll_logits: (R,B,Q,H)
+    # roll_idx: (R,)
+    # targets: (B,T)
+    R, B, Q, H = roll_logits.shape
+    roll_logits = roll_logits.reshape(R * B, Q, H)  # (R*B,Q,H)
+    targets = targets.unfold(-1, H, 1).permute(1, 0, 2)  # (W,B,H)
+    targets = targets[roll_idx].reshape(R * B, H)  # (R*B,H)
+    return F.cross_entropy(roll_logits, targets, reduction=reduction)
 
 
 def rolling_origin_accuracy(
     roll_logits: torch.Tensor, roll_idx: torch.Tensor, targets: torch.Tensor
 ) -> float:
-    H = roll_logits.shape[-1]  # horizon
-    sum_loss = 0.0
-    num_pred = 0
-    for logits, idx in zip(roll_logits, roll_idx):
-        roll_targets = targets[..., idx : idx + H]
-        ce = F.cross_entropy(logits, roll_targets, reduction="sum")
-        sum_loss = sum_loss + ce
-        num_pred = num_pred + roll_targets.numel()
-    return sum_loss / num_pred
+    # roll_logits: (R,B,Q,H)
+    # roll_idx: (R,)
+    # targets: (B,T)
+    R, B, Q, H = roll_logits.shape
+    logits = roll_logits.reshape(R * B, Q, H)  # (R*B,Q,H)
+    targets = targets.unfold(-1, H, 1).permute(1, 0, 2)  # (W,B,H)
+    targets = targets[roll_idx].reshape(R * B, H)  # (R*B,H)
+    return torch.sum(logits.argmax(1) == targets) / targets.numel()

@@ -233,7 +233,7 @@ class WaveNet(pl.LightningModule):
                     mode="min",
                     factor=0.5,
                     patience=self.train_opts.sched_patience,
-                    min_lr=5e-5,
+                    min_lr=1e-4,
                     threshold=1e-7,
                 ),
                 "monitor": "train_loss",
@@ -271,11 +271,15 @@ class WaveNet(pl.LightningModule):
                 skip_partial=self.train_opts.skip_partial,
             )
             loss = metrics.cross_entropy_ro(roll_logits, roll_idx, targets)
+            acc = metrics.rolling_origin_accuracy(roll_logits, roll_idx, targets)
         else:
             logits, _ = self(inputs)
             r = self.receptive_field if self.train_opts.skip_partial else 0
-            loss = F.cross_entropy(logits[..., r:], targets[..., r:])
-        return {"val_loss": loss}
+            logits = logits[..., r:]
+            targets = targets[..., r:]
+            loss = F.cross_entropy(logits, targets)
+            acc = torch.sum(logits.argmax(1) == targets) / targets.numel()
+        return {"val_loss": loss, "val_acc": acc}
 
     def training_epoch_end(self, outputs) -> None:
         avg_loss = torch.stack([x["train_loss"] for x in outputs]).mean()
@@ -283,7 +287,9 @@ class WaveNet(pl.LightningModule):
 
     def validation_epoch_end(self, outputs) -> None:
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        avg_acc = torch.stack([x["val_acc"] for x in outputs]).mean()
         self.log("val_loss_epoch", avg_loss, prog_bar=True)
+        self.log("val_acc_epoch", avg_acc, prog_bar=True)
 
     def create_sampler(self) -> sampling.ObservationSampler:
         return sampling.StochasticSampler()

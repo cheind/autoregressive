@@ -233,7 +233,7 @@ class WaveNet(pl.LightningModule):
                     mode="min",
                     factor=0.5,
                     patience=self.train_opts.sched_patience,
-                    min_lr=1e-4,
+                    min_lr=5e-5,
                     threshold=1e-7,
                 ),
                 "monitor": "train_loss",

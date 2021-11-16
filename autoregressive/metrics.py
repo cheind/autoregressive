@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 
 def sample_entropy(
@@ -60,3 +61,32 @@ def sample_entropy(
     B[mask] = (T - m - 1) * (T - m)
 
     return -torch.log(A / B)
+
+
+def cross_entropy_ro(
+    roll_logits: torch.Tensor, roll_idx: torch.Tensor, targets: torch.Tensor
+) -> float:
+    """Cross entropy over rolling origin results"""
+    H = roll_logits.shape[-1]  # horizon
+    sum_loss = 0.0
+    num_pred = 0
+    for logits, idx in zip(roll_logits, roll_idx):
+        roll_targets = targets[..., idx : idx + H]
+        ce = F.cross_entropy(logits, roll_targets, reduction="sum")
+        sum_loss = sum_loss + ce
+        num_pred = num_pred + roll_targets.numel()
+    return sum_loss / num_pred
+
+
+def rolling_origin_accuracy(
+    roll_logits: torch.Tensor, roll_idx: torch.Tensor, targets: torch.Tensor
+) -> float:
+    H = roll_logits.shape[-1]  # horizon
+    sum_loss = 0.0
+    num_pred = 0
+    for logits, idx in zip(roll_logits, roll_idx):
+        roll_targets = targets[..., idx : idx + H]
+        ce = F.cross_entropy(logits, roll_targets, reduction="sum")
+        sum_loss = sum_loss + ce
+        num_pred = num_pred + roll_targets.numel()
+    return sum_loss / num_pred

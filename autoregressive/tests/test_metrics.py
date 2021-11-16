@@ -1,7 +1,24 @@
 import torch
 import torch.nn.functional as F
 
-from .. import wave, generators
+from .. import metrics, wave, generators
+
+
+def test_sample_entropy():
+    # Uniform random
+    x = torch.rand(10, 1024)
+    se = metrics.sample_entropy(x)
+    assert se.mean() >= 2.0
+
+    # Straight lines
+    x = torch.arange(2 ** 12).float()
+    se = metrics.sample_entropy(x).mean()
+    assert abs(se) < 1e-3
+
+    # Sine
+    x = torch.sin(torch.linspace(0, 10 * 3.145, 2 ** 12))
+    se = metrics.sample_entropy(x).mean()
+    assert se < 0.2
 
 
 def identity_sampler(logits):
@@ -9,7 +26,7 @@ def identity_sampler(logits):
 
 
 @torch.no_grad()
-def test_rolling_nstep_ce():
+def test_cross_entropy_ro():
     torch.manual_seed(123)
     model = wave.WaveNet(
         wave_dilations=[1, 2, 4],
@@ -32,7 +49,7 @@ def test_rolling_nstep_ce():
         skip_partial=True,
         num_origins=M,
     )
-    loss = wave._rolling_origin_ce(roll_logits, roll_idx, targets)
+    loss = metrics.cross_entropy_ro(roll_logits, roll_idx, targets)
 
     expected_loss = 0.0
     for ridx in roll_idx:

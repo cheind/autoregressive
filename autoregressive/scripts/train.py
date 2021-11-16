@@ -38,13 +38,14 @@ def cli_main():
         mode="max",
     )
     lrm = LearningRateMonitor(logging_interval="step")
-    # es = EarlyStopping(
-    #     monitor="train_loss_epoch",
-    #     check_on_train_epoch_end=True,
-    #     min_delta=1e-4,
-    #     patience=2,
-    #     verbose=True,
-    # )
+    es = EarlyStopping(
+        monitor="val_acc_epoch",
+        mode="max",
+        check_on_train_epoch_end=True,
+        min_delta=1e-3,
+        patience=2,
+        verbose=False,
+    )
 
     _ = MyLightningCLI(
         wave.WaveNet,
@@ -55,7 +56,7 @@ def cli_main():
         # run=False,
         save_config_overwrite=True,
         trainer_defaults={
-            "callbacks": [ckpt, lrm],
+            "callbacks": [ckpt, lrm, es],
             "max_epochs": 30,
             "gpus": 1,
             "log_every_n_steps": 25,

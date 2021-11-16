@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 
 from scipy.stats import chi2
 
@@ -58,3 +57,23 @@ def test_stochastic_sampler():
     # plt.hist(samples.view(-1).int().numpy(), 4)
     # plt.legend()
     # plt.show()
+
+
+def test_gumbelsoftmax_sampler():
+    import torch.distributions as D
+    import torch.nn.functional as F
+
+    probs = torch.tensor([1.0, 2.0, 20.0, 1.0])
+    probs /= probs.sum()
+    print(probs)
+    log_probs = torch.log(probs)
+
+    tau = 2.0 / 3.0
+    g = D.Gumbel(loc=torch.tensor(0.0), scale=torch.tensor(1.0)).sample(
+        sample_shape=(10, 4)
+    )
+    print(g.shape)
+    gs = F.softmax((log_probs.unsqueeze(0) + g) / tau, dim=1)
+    print(gs)
+    print(gs.argmax(1))
+    print(gs.shape)

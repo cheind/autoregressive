@@ -54,10 +54,10 @@ def test_cross_entropy_ro():
     expected_loss = 0.0
     for ridx in roll_idx:
         expected_loss += -(
-            model_logprobs[0, targets[0, ridx], ridx]
-            + model_logprobs[1, targets[1, ridx], ridx]
-            + model_logprobs[0, targets[0, ridx + 1], ridx + 1]
-            + model_logprobs[1, targets[1, ridx + 1], ridx + 1]
+            model_logprobs[0, targets[0, ridx], ridx]  # noqa: W503
+            + model_logprobs[1, targets[1, ridx], ridx]  # noqa: W503
+            + model_logprobs[0, targets[0, ridx + 1], ridx + 1]  # noqa: W503
+            + model_logprobs[1, targets[1, ridx + 1], ridx + 1]  # noqa: W503
         )
     expected_loss /= M * 4
     assert torch.allclose(loss, expected_loss, atol=1e-2)

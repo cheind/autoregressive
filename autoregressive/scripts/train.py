@@ -43,7 +43,7 @@ def cli_main():
         mode="max",
         check_on_train_epoch_end=True,
         min_delta=1e-3,
-        patience=2,
+        patience=3,
         verbose=False,
     )
 

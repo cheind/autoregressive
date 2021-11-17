@@ -43,6 +43,11 @@ def test_greedy_sampler():
         torch.tensor([0.18, 0.18, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08]),
     )
 
+    # Check (B,Q,T) sampling
+    logits = torch.arange(24).view(4, 3, 2).float()
+    samples = sampling.GreedySampler()(logits)
+    assert samples.shape == (4, 2)
+
 
 def test_stochastic_sampler():
     torch.manual_seed(123)
@@ -52,6 +57,11 @@ def test_stochastic_sampler():
     assert _chi2test(
         samples.view(-1), torch.tensor([3500, 9400, 3500, 3500]) / 20000, p=0.01
     )
+
+    # Check (B,Q,T) sampling
+    logits = torch.arange(24).view(4, 3, 2).float()
+    samples = sampling.StochasticSampler()(logits)
+    assert samples.shape == (4, 2)
 
     # import matplotlib.pyplot as plt
     # plt.hist(samples.view(-1).int().numpy(), 4)

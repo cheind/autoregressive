@@ -14,12 +14,12 @@ class ObservationSampler(Protocol):
 
         Params
         ------
-        logits: (B,Q,1) tensor
+        logits: (B,Q,T) tensor
             model logits for a single temporal timestep.
 
         Returns
         -------
-        sample: (B,1) or (B,Q,1)
+        sample: (B,T) or (B,Q,T)
             Sample either compressed or 'one'-hot encoded
         """
         ...
@@ -27,11 +27,11 @@ class ObservationSampler(Protocol):
 
 class GreedySampler(ObservationSampler):
     def __call__(self, logits: torch.Tensor) -> torch.Tensor:
-        return torch.argmax(logits, dim=1, keepdim=False)  # (B,1)
+        return torch.argmax(logits, dim=1, keepdim=False)  # (B,T)
 
 
 class StochasticSampler(ObservationSampler):
     def __call__(self, logits: torch.Tensor) -> torch.Tensor:
         # Note, sampling from dists requires (*,Q) layout
         logits = logits.permute(0, 2, 1)
-        return D.Categorical(logits=logits).sample()  # (*)
+        return D.Categorical(logits=logits).sample()  # (*,)

@@ -1,5 +1,5 @@
+__all__ = ["sample_entropy"]
 import torch
-import torch.nn.functional as F
 
 
 def sample_entropy(
@@ -61,33 +61,3 @@ def sample_entropy(
     B[mask] = (T - m - 1) * (T - m)
 
     return -torch.log(A / B)
-
-
-def cross_entropy_ro(
-    roll_logits: torch.Tensor,
-    roll_idx: torch.Tensor,
-    targets: torch.Tensor,
-    reduction="mean",
-) -> float:
-    """Cross entropy over rolling origin results"""
-    # roll_logits: (R,B,Q,H)
-    # roll_idx: (R,)
-    # targets: (B,T)
-    R, B, Q, H = roll_logits.shape
-    roll_logits = roll_logits.reshape(R * B, Q, H)  # (R*B,Q,H)
-    targets = targets.unfold(-1, H, 1).permute(1, 0, 2)  # (W,B,H)
-    targets = targets[roll_idx].reshape(R * B, H)  # (R*B,H)
-    return F.cross_entropy(roll_logits, targets, reduction=reduction)
-
-
-def rolling_origin_accuracy(
-    roll_logits: torch.Tensor, roll_idx: torch.Tensor, targets: torch.Tensor
-) -> float:
-    # roll_logits: (R,B,Q,H)
-    # roll_idx: (R,)
-    # targets: (B,T)
-    R, B, Q, H = roll_logits.shape
-    logits = roll_logits.reshape(R * B, Q, H)  # (R*B,Q,H)
-    targets = targets.unfold(-1, H, 1).permute(1, 0, 2)  # (W,B,H)
-    targets = targets[roll_idx].reshape(R * B, H)  # (R*B,H)
-    return torch.sum(logits.argmax(1) == targets) / targets.numel()

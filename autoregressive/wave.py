@@ -8,7 +8,7 @@ import torch.nn
 import torch.nn.functional as F
 import torch.nn.init
 
-from . import fast, generators, sampling, encoding, metrics
+from . import fast, generators, sampling, encoding
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -146,6 +146,8 @@ class WaveNetTrainOpts:
     skip_partial: bool = True
     lr: float = 1e-3
     sched_patience: int = 25
+    train_ro_horizon: int = 1
+    train_ro_num_origins: int = None
     val_ro_horizon: int = 32
     val_ro_num_origins: int = 8
 
@@ -244,51 +246,65 @@ class WaveNet(pl.LightningModule):
         }
 
     def training_step(self, batch, batch_idx):
-        series, meta = batch
-        targets: torch.Tensor = series["x"][..., 1:]  # (B,T)
-        inputs: torch.Tensor = series["x"][..., :-1]  # (B,T)
-        logits, _ = self(inputs)
+        sampler = None
+        if self.train_opts.train_ro_horizon > 1:
+            sampler = sampling.DifferentiableSampler(hard=False)
 
-        r = self.receptive_field if self.train_opts.skip_partial else 0
-        loss = F.cross_entropy(logits[..., r:], targets[..., r:])
+        loss, acc = self._step(
+            batch,
+            horizon=self.train_opts.train_ro_horizon,
+            num_origins=self.train_opts.train_ro_num_origins,
+            sampler=sampler,
+        )
 
         self.log("train_loss", loss)
         return {"loss": loss, "train_loss": loss.detach()}
 
     def validation_step(self, batch, batch_idx):
-        series, meta = batch
+        sampler = None
+        if self.train_opts.val_ro_horizon > 1:
+            sampler = sampling.GreedySampler()
 
-        h = self.train_opts.val_ro_horizon
-        if h > 1:
-            inputs: torch.Tensor = series["x"]
-            logits = generators.rolling_origin_fast(
-                self, sampling.GreedySampler(), inputs, self.train_opts.val_ro_horizon
-            )
-            logits = logits[..., :-h]
-            targets = inputs[..., h:]
-            loss = F.cross_entropy(logits, targets)
-            acc = torch.sum(logits.argmax(1) == targets) / targets.numel()
-            # _, roll_logits, roll_idx = generators.rolling_origin(
-            #     self,
-            #     sampler=sampling.GreedySampler(),
-            #     obs=inputs,
-            #     horizon=self.train_opts.val_ro_horizon,
-            #     num_origins=self.train_opts.val_ro_num_origins,
-            #     random_origins=True,
-            #     skip_partial=self.train_opts.skip_partial,
-            # )
-            # loss = metrics.cross_entropy_ro(roll_logits, roll_idx, targets)
-            # acc = metrics.rolling_origin_accuracy(roll_logits, roll_idx, targets)
-        else:
-            inputs: torch.Tensor = series["x"][..., :-1]
-            targets: torch.Tensor = series["x"][..., 1:]
-            logits, _ = self(inputs)
-            r = self.receptive_field if self.train_opts.skip_partial else 0
-            logits = logits[..., r:]
-            targets = targets[..., r:]
-            loss = F.cross_entropy(logits, targets)
-            acc = torch.sum(logits.argmax(1) == targets) / targets.numel()
+        loss, acc = self._step(
+            batch,
+            horizon=self.train_opts.val_ro_horizon,
+            num_origins=self.train_opts.val_ro_num_origins,
+            sampler=sampler,
+        )
         return {"val_loss": loss, "val_acc": acc}
+
+    def _step(
+        self,
+        batch,
+        horizon: int,
+        num_origins: int,
+        sampler: sampling.ObservationSampler,
+    ):
+        series, _ = batch
+        inputs: torch.Tensor = series["x"][..., :-1]  # (B,T)
+        targets: torch.Tensor = series["x"][..., 1:]  # (B,T)
+
+        if horizon == 1:
+            logits, _ = self.forward(inputs)
+            if self.train_opts.skip_partial:
+                r = self.receptive_field
+                logits = logits[..., :-r]
+                targets = inputs[..., r:]
+        else:
+            _, logits, ridx = generators.rolling_origin(
+                self,
+                sampler=sampler,
+                obs=inputs,
+                horizon=horizon,
+                num_origins=num_origins,
+                random_origins=True,
+                skip_partial=self.train_opts.skip_partial,
+            )
+            logits, targets = generators.collate_rolling_origin(logits, ridx, targets)
+
+        loss = F.cross_entropy(logits, targets)
+        acc = torch.sum(logits.argmax(1) == targets) / targets.numel()
+        return loss, acc
 
     def training_epoch_end(self, outputs) -> None:
         avg_loss = torch.stack([x["train_loss"] for x in outputs]).mean()

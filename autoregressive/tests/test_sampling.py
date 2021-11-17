@@ -1,5 +1,5 @@
 import torch
-
+import torch.nn.functional as F
 from scipy.stats import chi2
 
 from .. import sampling
@@ -69,21 +69,20 @@ def test_stochastic_sampler():
     # plt.show()
 
 
-def test_gumbelsoftmax_sampler():
-    import torch.distributions as D
-    import torch.nn.functional as F
+def test_differentiable_sampler():
+    torch.manual_seed(123)
+    logits = torch.tensor([1.0, 2.0, 1.0, 1.0]).view(1, 4, 1).repeat(1, 1, 20000)
+    print(F.log_softmax(torch.tensor([1.0, 2.0, 1.0, 1.0])))
+    samples = sampling.DifferentiableSampler(tau=1.0)(logits)
+    assert samples.shape == (1, 4, 20000)
 
-    probs = torch.tensor([1.0, 2.0, 20.0, 1.0])
-    probs /= probs.sum()
-    print(probs)
-    log_probs = torch.log(probs)
+    # import matplotlib.pyplot as plt
+    # plt.hist(samples.argmax(1).view(-1).int().numpy(), 4)
+    # plt.legend()
+    # plt.show()
 
-    tau = 2.0 / 3.0
-    g = D.Gumbel(loc=torch.tensor(0.0), scale=torch.tensor(1.0)).sample(
-        sample_shape=(10, 4)
+    assert _chi2test(
+        samples.argmax(1).view(-1),
+        torch.tensor([3500, 9400, 3500, 3500]) / 20000,
+        p=0.01,
     )
-    print(g.shape)
-    gs = F.softmax((log_probs.unsqueeze(0) + g) / tau, dim=1)
-    print(gs)
-    print(gs.argmax(1))
-    print(gs.shape)

@@ -3,7 +3,7 @@ __all__ = [
     "generate_fast",
     "slice_generator",
     "rolling_origin",
-    "rolling_origin_fast",
+    "collate_rolling_origin",
 ]
 import itertools
 import warnings
@@ -147,13 +147,14 @@ def rolling_origin(
     return torch.stack(all_roll_samples, 0), torch.stack(all_roll_logits, 0), roll_idx
 
 
-def rolling_origin_fast(
-    model: "WaveNet",
-    sampler: "ObservationSampler",
-    obs: torch.Tensor,
-    horizon: int = 16,
-):
-    for _ in range(horizon):
-        logits, _ = model(obs)
-        obs = sampler(logits)
-    return logits
+def collate_rolling_origin(
+    roll_logits: torch.Tensor, roll_idx: torch.Tensor, targets: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    # roll_logits: (R,B,Q,H)
+    # roll_idx: (R,)
+    # targets: (B,T)
+    R, B, Q, H = roll_logits.shape
+    logits = roll_logits.reshape(R * B, Q, H)  # (R*B,Q,H)
+    targets = targets.unfold(-1, H, 1).permute(1, 0, 2)  # (W,B,H)
+    targets = targets[roll_idx].reshape(R * B, H)  # (R*B,H)
+    return logits, targets

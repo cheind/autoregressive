@@ -1,11 +1,15 @@
-__all__ = ["generate", "generate_fast", "slice_generator", "rolling_origin"]
+__all__ = [
+    "generate",
+    "generate_fast",
+    "slice_generator",
+    "rolling_origin",
+    "rolling_origin_fast",
+]
 import itertools
 import warnings
 from typing import TYPE_CHECKING, Iterator, List, Tuple
 
 import torch
-from torch.nn import init
-import torch.nn.functional as F
 
 from . import fast, encoding
 
@@ -91,7 +95,7 @@ def slice_generator(
     stop: int,
     step: int = 1,
     start: int = 0,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Slices the given generator to get subsequent predictions and network outputs."""
     sl = itertools.islice(gen, start, stop, step)  # List[(sample,output)]
     samples, outputs = list(zip(*sl))
@@ -141,3 +145,15 @@ def rolling_origin(
         all_roll_logits.append(roll_logits)
         all_roll_samples.append(roll_samples)
     return torch.stack(all_roll_samples, 0), torch.stack(all_roll_logits, 0), roll_idx
+
+
+def rolling_origin_fast(
+    model: "WaveNet",
+    sampler: "ObservationSampler",
+    obs: torch.Tensor,
+    horizon: int = 16,
+):
+    for _ in range(horizon):
+        logits, _ = model(obs)
+        obs = sampler(logits)
+    return logits

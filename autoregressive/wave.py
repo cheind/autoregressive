@@ -308,12 +308,12 @@ class WaveNet(pl.LightningModule):
 
     def training_epoch_end(self, outputs) -> None:
         avg_loss = torch.stack([x["train_loss"] for x in outputs]).mean()
-        self.log("train_loss_epoch", avg_loss, prog_bar=True)
+        self.log("train_loss_epoch", avg_loss, prog_bar=False)
 
     def validation_epoch_end(self, outputs) -> None:
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         avg_acc = torch.stack([x["val_acc"] for x in outputs]).mean()
-        self.log("val_loss_epoch", avg_loss, prog_bar=True)
+        self.log("val_loss_epoch", avg_loss, prog_bar=False)
         self.log("val_acc_epoch", avg_acc, prog_bar=True)
 
     def create_sampler(self) -> sampling.ObservationSampler:

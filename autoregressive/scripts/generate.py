@@ -7,7 +7,7 @@ import torch.utils.data
 import pytorch_lightning as pl
 
 
-from .. import wave, generators
+from .. import wave, generators, sampling
 from .forecast import InstantiateOnlyLightningCLI, load_model, create_fig
 
 
@@ -34,7 +34,7 @@ def main():
     cfg = cli.config
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = load_model(cli).to(dev)
-    sampler = model.create_sampler()
+    sampler = sampling.StochasticSampler()
     seeds = torch.randint(0, model.quantization_levels, size=(cfg["num_curves"], 1))
     seeds = seeds.to(dev)
 

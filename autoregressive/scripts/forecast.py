@@ -9,7 +9,7 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from pytorch_lightning.utilities.cli import LightningCLI
 
 
-from .. import wave, generators
+from .. import wave, generators, sampling
 
 
 class InstantiateOnlyLightningCLI(LightningCLI):
@@ -31,6 +31,9 @@ class ForecastLightningCLI(InstantiateOnlyLightningCLI):
         parser.add_argument("-num-obs", type=int)
         parser.add_argument("-num-curves", type=int, default=4)
         parser.add_argument(
+            "-sampler", choices=["stochastic", "greedy"], default="stochastic"
+        )
+        parser.add_argument(
             "--fast-wavenet", action=argparse.BooleanOptionalAction, default=True
         )
         parser.add_argument("ckpt", type=str)
@@ -50,6 +53,14 @@ def create_obs(cli: ForecastLightningCLI) -> torch.Tensor:
     dl = dm.val_dataloader()
     series_batch, _ = next(iter(dl))
     return series_batch["x"][: cli.config["num_curves"]]
+
+
+def create_sampler(cli: ForecastLightningCLI) -> sampling.ObservationSampler:
+    cfg = cli.config
+    if cfg["sampler"] == "stochastic":
+        return sampling.StochasticSampler()
+    elif cfg["sampler"] == "greedy":
+        return sampling.GreedySampler()
 
 
 def create_fig(num_curves: int):
@@ -80,7 +91,7 @@ def main():
     cfg = cli.config
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = load_model(cli).to(dev)
-    sampler = model.create_sampler()
+    sampler = create_sampler(cli)
     obs = create_obs(cli).to(dev)
 
     num_obs = cfg["num_obs"] or model.receptive_field

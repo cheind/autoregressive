@@ -257,22 +257,31 @@ class WaveNet(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         series, meta = batch
-        inputs: torch.Tensor = series["x"][..., :-1]
-        targets: torch.Tensor = series["x"][..., 1:]
 
-        if self.train_opts.val_ro_horizon > 1:
-            _, roll_logits, roll_idx = generators.rolling_origin(
-                self,
-                sampler=sampling.GreedySampler(),
-                obs=inputs,
-                horizon=self.train_opts.val_ro_horizon,
-                num_origins=self.train_opts.val_ro_num_origins,
-                random_origins=True,
-                skip_partial=self.train_opts.skip_partial,
+        h = self.train_opts.val_ro_horizon
+        if h > 1:
+            inputs: torch.Tensor = series["x"]
+            logits = generators.rolling_origin_fast(
+                self, sampling.GreedySampler(), inputs, self.train_opts.val_ro_horizon
             )
-            loss = metrics.cross_entropy_ro(roll_logits, roll_idx, targets)
-            acc = metrics.rolling_origin_accuracy(roll_logits, roll_idx, targets)
+            logits = logits[..., :-h]
+            targets = inputs[..., h:]
+            loss = F.cross_entropy(logits, targets)
+            acc = torch.sum(logits.argmax(1) == targets) / targets.numel()
+            # _, roll_logits, roll_idx = generators.rolling_origin(
+            #     self,
+            #     sampler=sampling.GreedySampler(),
+            #     obs=inputs,
+            #     horizon=self.train_opts.val_ro_horizon,
+            #     num_origins=self.train_opts.val_ro_num_origins,
+            #     random_origins=True,
+            #     skip_partial=self.train_opts.skip_partial,
+            # )
+            # loss = metrics.cross_entropy_ro(roll_logits, roll_idx, targets)
+            # acc = metrics.rolling_origin_accuracy(roll_logits, roll_idx, targets)
         else:
+            inputs: torch.Tensor = series["x"][..., :-1]
+            targets: torch.Tensor = series["x"][..., 1:]
             logits, _ = self(inputs)
             r = self.receptive_field if self.train_opts.skip_partial else 0
             logits = logits[..., r:]

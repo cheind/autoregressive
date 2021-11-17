@@ -81,8 +81,10 @@ model:
   train_opts:
     skip_partial: false
     lr: 0.01
-    sched_patience: 100
-    val_ro_horizon: 32
+    sched_patience: 50
+    train_ro_horizon: 8
+    train_ro_num_origins: 16
+    val_ro_horizon: 8
     val_ro_num_origins: 8
 data:
   class_path: autoregressive.datasets.FSeriesDataModule
@@ -91,7 +93,7 @@ data:
     batch_size: 64
     num_workers: 0
     train_params:
-      num_curves: 8096
+      num_curves: 8192
       num_tsamples: 2048
       dt: 0.02
       fterm_range:

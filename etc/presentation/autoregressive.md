@@ -2,9 +2,10 @@
 marp: true
 size: 16:9
 paginate: true
-theme: gaia
+theme: default
 backgroundColor: #fff
-math: mathjax
+color: #222
+math: katex
 ---
 <!-- 
 _class: lead
@@ -30,10 +31,10 @@ img[alt~="center"] {
 
 Given a set of random variables $\mathbf{x}=\{x_1,x_2,x_3...,x_T\}$, we model their joint
 $$
-\begin{align}
+\begin{align*}
 p(\mathbf{x}) &= \prod_{i=1}^Tp(x_i\mid \mathbf{x}_{j<i})\\
 &=p(x_1)p(x_2 \mid x_1)p(x_3 \mid x_2, x_1)\ldots,
-\end{align}
+\end{align*}
 $$
 always ok (chain rule).
 

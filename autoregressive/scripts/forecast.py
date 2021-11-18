@@ -165,6 +165,7 @@ def main():
             label="generated" if idx == 0 else None,
         )
         ax.set_ylim(0, model.quantization_levels)
+        ax.axvline(x=num_obs, c="r", linestyle="--")
 
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=2)

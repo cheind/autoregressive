@@ -3,8 +3,8 @@ marp: true
 size: 16:9
 paginate: true
 theme: default
-# backgroundColor: #fff
-# color: #222
+#backgroundColor: #fff
+#color: #33
 math: katex
 ---
 <!-- 
@@ -67,11 +67,16 @@ In general, a total $P=R-1$ paddings is required.
 <!--_footer: Autoregressive library uses layer-padding, WaveNet paper suggest input padding.-->
 ---
 
-# Code
+![bg fit right:50%](compare_curves_train_unroll.svg)
 
-```python
-if self.hard:
-  idx = z.argmax(1, keepdim=True)
-  z_hard = torch.zeros_like(logits).scatter_(1, idx, 1.0)
-  z = z_hard - z.detach() + z
-```
+# Results
+
+N-step forecast comparison between two models trained with and without unrolling on Fourier-series dataset with up to 4 terms.
+
+## Unrolling in Training
+(+) Decreases generative drift
+(+) Improves recreation of higher frequency patterns
+
+(-) Increases training time (rolling origin)
+(-) Sparser losses
+

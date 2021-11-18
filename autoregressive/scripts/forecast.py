@@ -1,7 +1,10 @@
 import argparse
 import time
+import dataclasses
+import pickle
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.utils.data
 import pytorch_lightning as pl
@@ -38,6 +41,23 @@ class ForecastLightningCLI(InstantiateOnlyLightningCLI):
         )
         parser.add_argument("ckpt", type=str)
         return super().add_arguments_to_parser(parser)
+
+
+@dataclasses.dataclass
+class CurveData:
+    t_range: tuple[int, int]
+    values: np.ndarray
+
+    @staticmethod
+    def from_tensor(c: torch.Tensor, tstart: int = 0):
+        assert c.dim() == 2
+        return CurveData(
+            (tstart, tstart + c.shape[-1]),
+            c.cpu().numpy(),
+        )
+
+    def asdict(self):
+        return dataclasses.asdict(self)
 
 
 def load_model(cli: ForecastLightningCLI) -> wave.WaveNet:
@@ -115,6 +135,17 @@ def main():
     t0 = time.time()
     trajs, _ = generators.slice_generator(g, stop=horizon)  # (B,T)
     print(f"Generation took {(time.time()-t0):.3f} secs")
+
+    # Save data
+    cd_obs = CurveData.from_tensor(obs, 0)
+    cd_gen = CurveData.from_tensor(trajs, num_obs)
+    pickle.dump(
+        {
+            "curves": {"obs": cd_obs.asdict(), "gen": cd_gen.asdict()},
+            "qlevels": model.quantization_levels,
+        },
+        open(f"tmp/forecast_{type(model).__name__}.pkl", "wb"),
+    )
 
     # Plot
     fig, grid = create_fig(num_curves=obs.shape[0])

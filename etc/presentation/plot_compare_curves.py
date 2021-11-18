@@ -23,8 +23,8 @@ def create_fig(num_curves: int):
 def main():
 
     in_files = [
-        ("tmp/forecast_WaveNet_v71.pkl", "1-step training"),
-        ("tmp/forecast_WaveNet_v70.pkl", "8-step training"),
+        ("etc/presentation/forecast_WaveNet_v71_noise.pkl", "1-step training"),
+        ("etc/presentation/forecast_WaveNet_v70_noise.pkl", "8-step training"),
     ]
     cds = [pickle.loads(open(p[0], "rb").read()) for p in in_files]
     num_curves = cds[0]["curves"]["obs"]["values"].shape[0]

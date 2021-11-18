@@ -69,14 +69,38 @@ In general, a total $P=R-1$ paddings is required.
 
 ![bg fit right:50%](compare_curves_train_unroll.svg)
 
-# Results
+# Train-Unrolling Results
 
 N-step forecast comparison between two models trained with and without unrolling on Fourier-series dataset with up to 4 terms.
 
-## Unrolling in Training
+## Conclusion
 (+) Decreases generative drift
 (+) Improves recreation of higher frequency patterns
 
 (-) Increases training time (rolling origin)
 (-) Sparser losses
 
+---
+
+![bg fit right:50%](compare_curves_noise.svg)
+
+# Train-Unrolling Results
+
+N-step prediction based on noisy observations - comparison between two models trained with and without unrolling on a clean Fourier series dataset with up to 4 terms.
+
+## Conclusion
+(+) Both models capture global trends
+
+(-) Accuracy of both modes decreases
+
+---
+
+![bg fit right:45%](compare_val_acc.svg)
+
+# Train-Unrolling Results
+
+8-step rolling origin validation comparison between models trained with and without unrolling on Fourier-series dataset with up to 4 terms.
+
+## Conclusion
+(+) Generally higher validation acc. at earlier training epochs.
+(+) Similar picture if validation unrolling > train unrolling steps.

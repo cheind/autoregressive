@@ -14,7 +14,7 @@ _paginate: false
  -->
 <style>
 section { 
-    font-size: 25px; 
+    font-size: 20px; 
 }
 img[alt~="center"] {
   display: block;
@@ -30,36 +30,41 @@ img[alt~="center"] {
 
 # Autoregressive
 
-Given a set of random variables $\mathbf{x}=\{x_1,x_2,x_3...,x_T\}$, we model their joint
+Given a set of random variables $\mathbf{x}=\{x_1,x_2,x_3...,x_T\}$, we represent their joint distribution as
 $$
 \begin{align*}
 p(\mathbf{x}) &= \prod_{i=1}^Tp(x_i\mid \mathbf{x}_{j<i})\\
 &=p(x_1)p(x_2 \mid x_1)p(x_3 \mid x_2, x_1)\ldots,
 \end{align*}
 $$
-always ok (chain rule).
+which is always possible (chain rule).
 
 ---
 
-# WaveNets
+# Dilated Convolutions
+<!--_footer: Note, how each input (orange) within the receptive field is used exactly once.-->
+Receptive field of dilated convolutions grows exponentially while parameters increase only linearly.
 
-Here comes some text, then the image
+![center](wavenet-dilated-convolutions.svg)
 
-![center](wavenets.svg) 
-
-Then again, text.
+In general, each layer with dilation factor $D_i$ and kernel size $K_i$ adds
+$$
+ r_i = (K_i-1)D_i
+$$
+to the receptive field $R=\sum_i r_i$.
 
 ---
 
-# Lists
+# Causal Padding
 
-Ich bin eine Liste
-1. a
-    - dadada
-    - dasdda
-1. b
-1. c
 
+Causal padding (left-padding) ensures that convoluted features do not depend on future values. Two possibilities: input-padding (left), layer-padding (right)
+
+![](wavenet-causal-padding.svg) ![](wavenet-causal-padding2.svg)
+
+In general, a total $P=R-1$ paddings is required.
+
+<!--_footer: Autoregressive library uses layer-padding, WaveNet paper suggest input padding.-->
 ---
 
 # Code

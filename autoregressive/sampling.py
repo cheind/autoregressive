@@ -11,7 +11,7 @@ import torch.distributions as D
 import torch.nn.functional as F
 
 
-class ObservationSampler(Protocol):
+class ObservationSampler:
     """Protocol for all sampling strategies from model logits.
     Generally used in generative mode."""
 
@@ -31,19 +31,19 @@ class ObservationSampler(Protocol):
         ...
 
 
-class GreedySampler(ObservationSampler):
+class GreedySampler:
     def __call__(self, logits: torch.Tensor) -> torch.Tensor:
         return torch.argmax(logits, dim=1, keepdim=False)  # (B,T)
 
 
-class StochasticSampler(ObservationSampler):
+class StochasticSampler:
     def __call__(self, logits: torch.Tensor) -> torch.Tensor:
         # Note, sampling from dists requires (*,Q) layout
         logits = logits.permute(0, 2, 1)
         return D.Categorical(logits=logits).sample()  # (*,)
 
 
-class DifferentiableSampler(ObservationSampler):
+class DifferentiableSampler:
     # https://arxiv.org/abs/1611.01144
     def __init__(self, tau: float = 2.0 / 3.0, hard: bool = False) -> None:
         super().__init__()

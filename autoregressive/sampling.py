@@ -52,7 +52,6 @@ class DifferentiableSampler:
 
     def __call__(self, logits: torch.Tensor) -> torch.Tensor:
         g = -torch.empty_like(logits).exponential_().log()
-        # g = D.Gumbel(0.0, 1.0).sample(logits.shape)  # ~Gumbel(0,1)
         z = (F.log_softmax(logits, 1) + g) / self.tau  # ~Gumbel(log_prob,tau)
         z = F.softmax(z, 1)  # (B,Q,T)
 

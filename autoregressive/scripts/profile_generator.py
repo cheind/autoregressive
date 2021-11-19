@@ -14,11 +14,21 @@ def measure(gen, n: int, verbose: bool = False):
         ],
         with_stack=True,
     ) as p:
-        generators.slice_generator(gen, stop=n)
+        generators.slice_generator(gen, stop=n)[0].cpu()
     if verbose:
-        print(p.key_averages().table(sort_by="self_cuda_time_total", row_limit=10))
+        print(
+            p.key_averages().table(
+                sort_by="cuda_time_total", row_limit=10, top_level_events_only=True
+            )
+        )
     ev = p.profiler.total_average()
-    return ev.self_cuda_time_total / 1e6, ev.self_cpu_time_total / 1e6
+    return ev.cuda_time_total / 1e6, ev.cpu_time_total / 1e6
+
+    # import time
+
+    # t = time.time()
+    # generators.slice_generator(gen, stop=n)[0].cpu()
+    # print(time.time() - t)
 
 
 @torch.no_grad()
@@ -28,16 +38,16 @@ def main():
         wave.compute_receptive_field(dilations[: i + 1], [2] * (i + 1))
         for i in range(len(dilations))
     ]
-    B = 1
+    B = 32
     T = 2048
-    TF = 100
+    TF = 1000
     W = 128
     Q = 8
 
     data = []
     x = torch.randint(0, Q, (B, Q, T)).float().cuda()
     sampler = lambda x: x
-    for i in range(len(dilations)):
+    for i in range(12, 13):
         try:
             print(dilations[: (i + 1)])
             net = (

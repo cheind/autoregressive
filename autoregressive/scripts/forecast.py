@@ -78,9 +78,9 @@ def create_obs(cli: ForecastLightningCLI) -> torch.Tensor:
 def create_sampler(cli: ForecastLightningCLI) -> sampling.ObservationSampler:
     cfg = cli.config
     if cfg["sampler"] == "stochastic":
-        return sampling.StochasticSampler()
+        return sampling.sample_stochastic
     elif cfg["sampler"] == "greedy":
-        return sampling.GreedySampler()
+        return sampling.sample_greedy
 
 
 def create_fig(num_curves: int, figsize: tuple[int, int] = None):

@@ -30,13 +30,13 @@ def _chi2test(s: torch.Tensor, pi: torch.Tensor, p=0.05) -> bool:
 def test_greedy_sampler():
     torch.manual_seed(123)
     logits = torch.rand(2, 10, 5000)
-    samples = sampling.GreedySampler()(logits)
+    samples = sampling.sample_greedy(logits)
     assert samples.shape == (2, 5000)
     assert _chi2test(samples.view(-1), torch.ones(10) * 0.1)
 
     logits = torch.rand(2, 10, 10000)
     logits[:, :2, :] += 0.1
-    samples = sampling.GreedySampler()(logits)
+    samples = sampling.sample_greedy(logits)
     assert not _chi2test(samples.view(-1), torch.ones(10) * 0.1)
     assert _chi2test(
         samples.view(-1),
@@ -45,14 +45,14 @@ def test_greedy_sampler():
 
     # Check (B,Q,T) sampling
     logits = torch.arange(24).view(4, 3, 2).float()
-    samples = sampling.GreedySampler()(logits)
+    samples = sampling.sample_greedy(logits)
     assert samples.shape == (4, 2)
 
 
 def test_stochastic_sampler():
     torch.manual_seed(123)
     logits = torch.tensor([1.0, 2.0, 1.0, 1.0]).view(1, 4, 1).repeat(1, 1, 20000)
-    samples = sampling.StochasticSampler()(logits)
+    samples = sampling.sample_stochastic(logits)
     assert samples.shape == (1, 20000)
     assert _chi2test(
         samples.view(-1), torch.tensor([3500, 9400, 3500, 3500]) / 20000, p=0.01
@@ -60,7 +60,7 @@ def test_stochastic_sampler():
 
     # Check (B,Q,T) sampling
     logits = torch.arange(24).view(4, 3, 2).float()
-    samples = sampling.StochasticSampler()(logits)
+    samples = sampling.sample_stochastic(logits)
     assert samples.shape == (4, 2)
 
     # import matplotlib.pyplot as plt
@@ -72,8 +72,8 @@ def test_stochastic_sampler():
 def test_differentiable_sampler():
     torch.manual_seed(123)
     logits = torch.tensor([1.0, 2.0, 1.0, 1.0]).view(1, 4, 1).repeat(1, 1, 20000)
-    print(F.log_softmax(torch.tensor([1.0, 2.0, 1.0, 1.0])))
-    samples = sampling.DifferentiableSampler(tau=1.0)(logits)
+    print(F.log_softmax(torch.tensor([1.0, 2.0, 1.0, 1.0]), 0))
+    samples = sampling.sample_differentiable(logits, tau=1.0)
     assert samples.shape == (1, 4, 20000)
 
     # import matplotlib.pyplot as plt

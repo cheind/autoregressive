@@ -34,7 +34,6 @@ def main():
     cfg = cli.config
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = load_model(cli).to(dev)
-    sampler = sampling.StochasticSampler()
     seeds = torch.randint(0, model.quantization_levels, size=(cfg["num_curves"], 1))
     seeds = seeds.to(dev)
 
@@ -47,13 +46,13 @@ def main():
         g = generators.generate_fast(
             model=model,
             initial_obs=seeds,
-            sampler=sampler,
+            sampler=sampling.sample_stochastic,
         )
     else:
         g = generators.generate(
             model=model,
             initial_obs=seeds,
-            sampler=sampler,
+            sampler=sampling.sample_stochastic,
         )
     t0 = time.time()
     trajs, _ = generators.slice_generator(g, stop=horizon)  # (B,T)

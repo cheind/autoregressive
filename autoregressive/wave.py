@@ -261,12 +261,11 @@ class WaveNet(pl.LightningModule):
             self.train_opts.train_ro_horizon > 1
             and self.train_opts.train_ro_loss_lambda > 0.0
         ):
-            sampler = sampling.DifferentiableSampler(hard=False)
             n_loss, _ = self._step(
                 batch,
                 horizon=self.train_opts.train_ro_horizon,
                 num_origins=self.train_opts.train_ro_num_origins,
-                sampler=sampler,
+                sampler=sampling.sample_differentiable,
             )
 
         # Combine losses
@@ -277,7 +276,7 @@ class WaveNet(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         sampler = None
         if self.train_opts.val_ro_horizon > 1:
-            sampler = sampling.GreedySampler()
+            sampler = sampling.sample_greedy
 
         loss, acc = self._step(
             batch,
@@ -329,6 +328,3 @@ class WaveNet(pl.LightningModule):
         avg_acc = torch.stack([x["val_acc"] for x in outputs]).mean()
         self.log("val_loss_epoch", avg_loss, prog_bar=False)
         self.log("val_acc_epoch", avg_acc, prog_bar=True)
-
-    def create_sampler(self) -> sampling.ObservationSampler:
-        return sampling.StochasticSampler()

@@ -93,10 +93,10 @@ def test_compressed_generators():
     # # done as generators produce as first prediction the net result of first observation.
     for i in range(16):
         gslow = generators.generate(
-            net, x[..., : (i + 1)], sampler=sampling.GreedySampler()
+            net, x[..., : (i + 1)], sampler=sampling.sample_greedy
         )
         gfast = generators.generate_fast(
-            net, x[..., : (i + 1)], sampler=sampling.GreedySampler()
+            net, x[..., : (i + 1)], sampler=sampling.sample_greedy
         )
         yslow_samples, yslow_logits = generators.slice_generator(gslow, 1)  # predict 1
         yfast_samples, yfast_logits = generators.slice_generator(gfast, 1)  # predict 1
@@ -111,8 +111,8 @@ def test_compressed_generators():
 
     # # Next, we compare the generators for equality when predicting more than
     # # one element, given a single observation (i.e empty queues)
-    gslow = generators.generate(net, x[..., :1], sampler=sampling.GreedySampler())
-    gfast = generators.generate_fast(net, x[..., :1], sampler=sampling.GreedySampler())
+    gslow = generators.generate(net, x[..., :1], sampler=sampling.sample_greedy)
+    gfast = generators.generate_fast(net, x[..., :1], sampler=sampling.sample_greedy)
     yslow_samples, yslow_logits = generators.slice_generator(gslow, 60)
     yfast_samples, yfast_logits = generators.slice_generator(gfast, 60)
     assert yslow_logits.shape == (1, 4, 60)

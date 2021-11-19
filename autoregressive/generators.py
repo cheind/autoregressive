@@ -7,15 +7,67 @@ __all__ = [
 ]
 import itertools
 import warnings
+import abc
 from typing import TYPE_CHECKING, Iterator, List, Tuple
 
 import torch
+from torch._C import device
 
 from . import fast, encoding
 
 if TYPE_CHECKING:
     from .wave import WaveNet
     from .sampling import ObservationSampler
+
+
+# class GeneratorBase(abc.ABC):
+#     def __init__(self, model: "WaveNet") -> None:
+#         super().__init__()
+#         self.model = model
+
+
+# class Generator:
+#     def __init__(self, model: "WaveNet") -> None:
+#         self.model = model
+#         self.R = model.receptive_field
+#         self.Q = model.quantization_levels
+#         self.recent_x = None
+
+#     def update(self, x: torch.Tensor, c: torch.Tensor = None):
+#         x = encoding.one_hotf(x, self.Q)
+#         B, Q, T = x.shape
+#         if T == 0:
+#             return
+#         if self.recent_x is None:
+#             self.recent_x = x.new_zeros((B, self.Q, self.R))
+
+
+class RecentBuffer:
+    """A simple deque (with max-size) implemented using a torch.Tensor"""
+
+    def __init__(
+        self, shape: torch.Size, dtype: torch.dtype = None, dev: torch.device = None
+    ):
+        self._buf = torch.zeros(shape, dtype=dtype, device=dev)  # (B,Q,T)
+        self._T = self._buf.shape[-1]
+        self._start = self._T
+
+    def add(self, x: torch.Tensor):
+        S = x.shape[-1]
+        if S == 0:
+            return
+        N = min(self._T, S)
+        self._buf = self._buf.roll(-N, -1)  # create space
+        self._buf[..., -N:] = x[..., -N:]  # copy
+        self._start = max(0, self._start - N)  # update start
+
+    @property
+    def buffer(self):
+        if self._start > 0:
+            return self._buf[..., self._start :]
+        else:
+            return self._buf
+
 
 WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
 
@@ -46,7 +98,9 @@ def generate(
         s = sampler(recent_logits)
         yield s, recent_logits
         roll = int(t == R)
-        history = history.roll(-roll, -1)  # no-op as long as history is not full
+        history = history.roll(-roll, -1)  #
+        #
+        # no-op as long as history is not full
         t = min(t + 1, R)
         history[..., t - 1 : t] = encoding.one_hotf(s, quantization_levels=Q)
 

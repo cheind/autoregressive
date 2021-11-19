@@ -7,6 +7,34 @@ def identity_sampler(logits):
     return logits
 
 
+def test_recent_buffer():
+    r = generators.RecentBuffer((4,), dtype=int)
+    assert r.buffer.shape == (0,)
+    r.add(torch.tensor([1, 2]))
+    assert torch.allclose(r.buffer, torch.tensor([1, 2]))
+    r.add(torch.tensor([3, 4, 5]))
+    assert torch.allclose(r.buffer, torch.tensor([2, 3, 4, 5]))
+    r.add(torch.tensor([6]))
+    assert torch.allclose(r.buffer, torch.tensor([3, 4, 5, 6]))
+    r.add(torch.arange(7, 100, 1))
+    assert torch.allclose(r.buffer, torch.tensor([96, 97, 98, 99]))
+    r.add(torch.empty((0,)))
+    assert torch.allclose(r.buffer, torch.tensor([96, 97, 98, 99]))
+
+    r = generators.RecentBuffer((2, 3, 4), dtype=torch.float32)
+    assert r.buffer.shape == (2, 3, 0)
+
+    x0 = torch.rand(2, 3, 2)
+    r.add(x0)
+    assert torch.allclose(r.buffer, x0)
+    x1 = torch.rand(2, 3, 3)
+    r.add(x1)
+    assert torch.allclose(r.buffer, torch.cat((x0[..., -1:], x1), -1))
+    x2 = torch.rand(2, 3, 100)
+    r.add(x2)
+    assert torch.allclose(r.buffer, x2[..., -4:])
+
+
 @torch.no_grad()
 def test_generators():
     # Pretty useless to use quantization level of 1, but we use floats in the tests.

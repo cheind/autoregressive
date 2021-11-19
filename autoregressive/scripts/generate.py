@@ -61,15 +61,14 @@ def main():
     print(f"Generation took {(time.time()-t0):.3f} secs")
 
     # Plot
-    fig, grid = create_fig(num_curves=1)
+    fig, grid = create_fig(num_curves=1, figsize=(8, 3))
     for traj in trajs:
-        grid[0].step(t, traj.cpu())
-        grid[0].set_ylim(0, model.quantization_levels)
-
-    handles, labels = grid[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=2)
+        grid[0].step(t, traj.cpu(), alpha=0.8)
+    grid[0].set_ylim(0, model.quantization_levels)
+    grid[0].set_xlabel("Timestep")
+    grid[0].set_ylabel("Quantization Level")
     fig.tight_layout()
-    fig.savefig(f"tmp/generate_{type(model).__name__}.svg", bbox_inches="tight")
+    fig.savefig(f"tmp/prior_samples.svg", bbox_inches="tight")
     plt.show()
 
 

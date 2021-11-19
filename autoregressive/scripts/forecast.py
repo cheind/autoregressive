@@ -83,8 +83,8 @@ def create_sampler(cli: ForecastLightningCLI) -> sampling.ObservationSampler:
         return sampling.GreedySampler()
 
 
-def create_fig(num_curves: int):
-    fig = plt.figure()
+def create_fig(num_curves: int, figsize: tuple[int, int] = None):
+    fig = plt.figure(figsize=figsize)
     grid = ImageGrid(
         fig=fig,
         rect=111,

@@ -104,3 +104,11 @@ N-step prediction based on noisy observations - comparison between two models tr
 ## Conclusion
 (+) Generally higher validation acc. at earlier training epochs.
 (+) Similar picture if validation unrolling > train unrolling steps.
+
+---
+
+# Generative Results
+
+The following graph shows four samples drawn from the models' prior distribution.
+
+![center w:1024](prior_samples.svg)

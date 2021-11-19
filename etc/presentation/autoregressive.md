@@ -116,8 +116,8 @@ The following graph shows four samples drawn from the models' prior distribution
 ![bg fit right:50%](benchmark_generators.svg)
 
 # Runtime Performance Results
-
-The plot to the left shows default (blue) and fast (orange) sample generation using 64 wave-channels, 8 quantization levels and 32 batch-size.
+<!-- _footer: '*Performed on a 1080 Ti' -->
+The plot to the left shows default (blue) and fast (orange) sample generation* using 64 wave-channels, 8 quantization levels and 32 batch-size.
 
 ## Conclusion
 (+) Fast method avoids exponential inference time as layer depth increases.

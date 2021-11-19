@@ -67,10 +67,10 @@ def main():
     grid[0].set_xlabel("Timestep")
     grid[0].set_ylabel("Quantization Level")
     fig.tight_layout()
-    fig.savefig(f"tmp/prior_samples.svg", bbox_inches="tight")
+    fig.savefig("tmp/prior_samples.svg", bbox_inches="tight")
     plt.show()
 
 
 if __name__ == "__main__":
-    # python -m autoregressive.scripts.generate --config models\fseries\config.yaml "models\fseries\wavenet-epoch=16-val_loss_epoch=4.9223.ckpt"
+    # python -m autoregressive.scripts.generate --config models\fseries\config.yaml "models\fseries\wavenet-epoch=16-val_loss_epoch=4.9223.ckpt" # noqa:E501
     main()

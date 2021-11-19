@@ -6,7 +6,7 @@ from .. import sampling
 
 
 def _chi2test(s: torch.Tensor, pi: torch.Tensor, p=0.05) -> bool:
-    """Returns true if the null hypothesis of bin-probabilities pi for observations s is accepted."""
+    """Returns true if the null hypothesis of bin-probabilities pi for observations s is accepted. """  # noqa:E501
     # Number of categories
     K = len(pi)
     # Number of observations

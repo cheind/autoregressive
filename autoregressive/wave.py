@@ -127,7 +127,7 @@ class WaveNetLogitsHead(WaveLayerBase):
     def __init__(self, wave_channels: int, out_channels: int):
         super().__init__(kernel_size=1, dilation=1, in_channels=wave_channels)
         self.transform = torch.nn.Sequential(
-            torch.nn.LeakyReLU(),  # note, we perform non-lin first (i.e on sum of skips)
+            torch.nn.LeakyReLU(),  # note, we perform non-lin first (i.e on sum of skips) # noqa:E501
             torch.nn.Conv1d(
                 wave_channels, wave_channels * 2, kernel_size=1
             ),  # enlarge and squeeze (not based on paper)
@@ -259,7 +259,7 @@ class WaveNet(pl.LightningModule):
         n_loss = 0.0
         if (
             self.train_opts.train_ro_horizon > 1
-            and self.train_opts.train_ro_loss_lambda > 0.0
+            and self.train_opts.train_ro_loss_lambda > 0.0  # noqa:W503
         ):
             n_loss, _ = self._step(
                 batch,

@@ -175,5 +175,5 @@ def main():
 
 
 if __name__ == "__main__":
-    # python -m autoregressive.scripts.forecast --config models\fseries\config.yaml "models\fseries\wavenet-epoch=16-val_loss_epoch=4.9223.ckpt"
+    # python -m autoregressive.scripts.forecast --config models\fseries\config.yaml "models\fseries\wavenet-epoch=16-val_loss_epoch=4.9223.ckpt" # noqa: E501
     main()

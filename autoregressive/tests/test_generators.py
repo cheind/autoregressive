@@ -23,7 +23,7 @@ def test_generators():
     assert y.shape == (1, 1, 16)
 
     # Next, we compare the initial generator prediction to net output y. This can be
-    # done as generators produce as first prediction the net result of first observation.
+    # done as generators produce as first prediction the net result of first observation. # noqa:E501
     for i in range(16):
         gslow = generators.generate(net, x[..., : (i + 1)], sampler=identity_sampler)
         gfast = generators.generate_fast(
@@ -89,8 +89,8 @@ def test_compressed_generators():
     y, _ = net(x)
     assert y.shape == (1, 4, 16)
 
-    # # Next, we compare the initial generator prediction to net output y. This can be
-    # # done as generators produce as first prediction the net result of first observation.
+    # Next, we compare the initial generator prediction to net output y. This can be
+    # done as generators produce as first prediction the net result of first observation. # noqa:E501
     for i in range(16):
         gslow = generators.generate(
             net, x[..., : (i + 1)], sampler=sampling.sample_greedy

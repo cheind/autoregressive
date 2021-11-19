@@ -76,7 +76,6 @@ N-step forecast comparison between two models trained with and without unrolling
 ## Conclusion
 (+) Decreases generative drift
 (+) Improves recreation of higher frequency patterns
-
 (-) Increases training time (rolling origin)
 (-) Sparser losses
 
@@ -90,7 +89,6 @@ N-step prediction based on noisy observations - comparison between two models tr
 
 ## Conclusion
 (+) Both models capture global trends
-
 (-) Accuracy of both modes decreases
 
 ---
@@ -112,3 +110,16 @@ N-step prediction based on noisy observations - comparison between two models tr
 The following graph shows four samples drawn from the models' prior distribution.
 
 ![center w:1024](prior_samples.svg)
+
+---
+
+![bg fit right:50%](benchmark_generators.svg)
+
+# Runtime Performance Results
+
+The plot to the left shows default (blue) and fast (orange) sample generation using 64 wave-channels, 8 quantization levels and 32 batch-size.
+
+## Conclusion
+(+) Fast method avoids exponential inference time as layer depth increases.
+(-) Code overhead is considerable.
+

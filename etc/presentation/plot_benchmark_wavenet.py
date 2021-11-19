@@ -21,7 +21,9 @@ def create_fig(num_curves: int):
 
 
 def main():
-    data = pickle.loads(open("etc/presentation/benchmark_wavenet.pkl", "rb").read())
+    data = pickle.loads(
+        open("etc/presentation/profile_generators_W64_B32_Q8_N256.pkl", "rb").read()
+    )
     rs = [d["L"] for d in data]
     slow = [d["slow"] * 100 for d in data]
     fast = [d["fast"] * 100 for d in data]
@@ -29,10 +31,11 @@ def main():
     fig, ax = plt.subplots()
     ax.plot(rs, slow, label="default generation")
     ax.plot(rs, fast, label="fast generation")
-    ax.set_ylabel("Runtime [sec] for 100 datapoints")
+    ax.set_ylabel("Runtime [sec] for 100 samples")
     ax.set_xlabel("Number of Dilated Layers")
     ax.legend(loc="upper center")
     fig.tight_layout()
+    fig.savefig(f"tmp/benchmark_generators.svg", bbox_inches="tight")
     plt.show()
 
 

@@ -37,17 +37,16 @@ def main():
         for i in range(len(dilations))
     ]
     B = 32
-    T = 2 ** 13
     N = 256
-    W = 128
+    W = 64
     Q = 8
 
     data = []
-    x = torch.randint(0, Q, (B, Q, T)).float().cuda()
     sampler = lambda x: x
     for i in range(len(dilations)):
         try:
             print(dilations[: (i + 1)])
+
             net = (
                 wave.WaveNet(
                     quantization_levels=Q,
@@ -57,6 +56,8 @@ def main():
                 .cuda()
                 .eval()
             )
+
+            x = torch.randint(0, Q, (B, Q, rs[i])).float().cuda()
             # burn-in
             for _ in range(10):
                 net(x)
@@ -66,6 +67,8 @@ def main():
             g_fast = generators.generate_fast(net, x, sampler)
             t_fast = measure(g_fast, N, verbose=True)
             del g_fast
+            del net
+            del x
             entry = {
                 "R": rs[i],
                 "L": i,
@@ -78,13 +81,14 @@ def main():
             print(entry)
             data.append(entry)
         except RuntimeError as e:
+            print("Error")
             break
         except KeyboardInterrupt:
             print("Stopping...")
             break
     pickle.dump(
         data,
-        open(f"tmp/profile_generators_W{W}_B{B}_Q{Q}_T{T}_N{N}.pkl", "wb"),
+        open(f"tmp/profile_generators_W{W}_B{B}_Q{Q}_N{N}.pkl", "wb"),
     )
 
 

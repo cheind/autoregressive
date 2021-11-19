@@ -7,28 +7,26 @@ from .. import wave, generators
 
 
 def measure(gen, n: int, verbose: bool = False):
-    with torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        with_stack=True,
-    ) as p:
-        generators.slice_generator(gen, stop=n)[0].cpu()
-    if verbose:
-        print(
-            p.key_averages().table(
-                sort_by="cuda_time_total", row_limit=10, top_level_events_only=True
-            )
-        )
-    ev = p.profiler.total_average()
-    return ev.cuda_time_total / 1e6, ev.cpu_time_total / 1e6
+    # with torch.profiler.profile(
+    #     activities=[
+    #         torch.profiler.ProfilerActivity.CPU,
+    #         torch.profiler.ProfilerActivity.CUDA,
+    #     ],
+    #     with_stack=True,
+    # ) as p:
+    #     generators.slice_generator(gen, stop=n)[0].cpu()
+    # if verbose:
+    #     print(
+    #         p.key_averages().table(
+    #             sort_by="cuda_time_total", row_limit=10, top_level_events_only=True
+    #         )
+    #     )
+    # ev = p.profiler.total_average()
+    # return ev.cuda_time_total / 1e6, ev.cpu_time_total / 1e6
 
-    # import time
-
-    # t = time.time()
-    # generators.slice_generator(gen, stop=n)[0].cpu()
-    # print(time.time() - t)
+    t = time.time()
+    generators.slice_generator(gen, stop=n)[0].cpu()
+    return (time.time() - t) / n
 
 
 @torch.no_grad()
@@ -39,15 +37,15 @@ def main():
         for i in range(len(dilations))
     ]
     B = 32
-    T = 2048
-    TF = 1000
+    T = 2 ** 13
+    N = 256
     W = 128
     Q = 8
 
     data = []
     x = torch.randint(0, Q, (B, Q, T)).float().cuda()
     sampler = lambda x: x
-    for i in range(12, 13):
+    for i in range(len(dilations)):
         try:
             print(dilations[: (i + 1)])
             net = (
@@ -62,13 +60,11 @@ def main():
             # burn-in
             for _ in range(10):
                 net(x)
-            print("slow")
             g_slow = generators.generate(net, x, sampler)
-            t_slow = measure(g_slow, TF, verbose=True)
+            t_slow = measure(g_slow, N, verbose=True)
             del g_slow
-            print("fast")
             g_fast = generators.generate_fast(net, x, sampler)
-            t_fast = measure(g_fast, TF, verbose=True)
+            t_fast = measure(g_fast, N, verbose=True)
             del g_fast
             entry = {
                 "R": rs[i],
@@ -82,11 +78,13 @@ def main():
             print(entry)
             data.append(entry)
         except RuntimeError as e:
-            print(e)
+            break
+        except KeyboardInterrupt:
+            print("Stopping...")
             break
     pickle.dump(
         data,
-        open(f"tmp/profile_generators_W{W}_B{B}_Q{Q}.pkl", "wb"),
+        open(f"tmp/profile_generators_W{W}_B{B}_Q{Q}_T{T}_N{N}.pkl", "wb"),
     )
 
 

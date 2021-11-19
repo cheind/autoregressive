@@ -257,7 +257,10 @@ class WaveNet(pl.LightningModule):
 
         # N-Step unrolling sparse loss
         n_loss = 0.0
-        if self.train_opts.train_ro_horizon > 1:
+        if (
+            self.train_opts.train_ro_horizon > 1
+            and self.train_opts.train_ro_loss_lambda > 0.0
+        ):
             sampler = sampling.DifferentiableSampler(hard=False)
             n_loss, _ = self._step(
                 batch,

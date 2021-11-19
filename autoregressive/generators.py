@@ -26,29 +26,13 @@ if TYPE_CHECKING:
 #         self.model = model
 
 
-# class Generator:
-#     def __init__(self, model: "WaveNet") -> None:
-#         self.model = model
-#         self.R = model.receptive_field
-#         self.Q = model.quantization_levels
-#         self.recent_x = None
-
-#     def update(self, x: torch.Tensor, c: torch.Tensor = None):
-#         x = encoding.one_hotf(x, self.Q)
-#         B, Q, T = x.shape
-#         if T == 0:
-#             return
-#         if self.recent_x is None:
-#             self.recent_x = x.new_zeros((B, self.Q, self.R))
-
-
 class RecentBuffer:
     """A simple deque (with max-size) implemented using a torch.Tensor"""
 
     def __init__(
-        self, shape: torch.Size, dtype: torch.dtype = None, dev: torch.device = None
+        self, shape: torch.Size, dtype: torch.dtype = None, device: torch.device = None
     ):
-        self._buf = torch.zeros(shape, dtype=dtype, device=dev)  # (B,Q,T)
+        self._buf = torch.zeros(shape, dtype=dtype, device=device)  # (B,Q,T)
         self._T = self._buf.shape[-1]
         self._start = self._T
 
@@ -69,6 +53,29 @@ class RecentBuffer:
             return self._buf
 
 
+class Generator:
+    def __init__(self, model: "WaveNet") -> None:
+        self.model = model
+        self.R = self.model.receptive_field
+        self.Q = self.model.quantization_levels
+        self.recent_input = None
+
+    def update(self, x: torch.Tensor, c: torch.Tensor = None):
+        x = encoding.one_hotf(x, self.Q)
+        B, Q, T = x.shape
+        if self.recent_input is None:
+            # Lazy initialize to infer B and types
+            self.recent_input = RecentBuffer(
+                (B, Q, self.R), dtype=x.dtype, device=x.device
+            )
+        self.recent_input.add(x)
+
+    def step(self) -> torch.Tensor:
+        assert self.recent_input is not None, "Call Generator.update first"
+        logits, _ = self.model.forward(self.recent_input.buffer)
+        return logits[..., -1:]
+
+
 WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
 
 
@@ -77,32 +84,13 @@ def generate(
     initial_obs: torch.Tensor,
     sampler: "ObservationSampler",
 ) -> WaveGenerator:
-    initial_obs = encoding.one_hotf(
-        initial_obs, quantization_levels=model.quantization_levels
-    )
-    B, Q, T = initial_obs.shape
-    R = model.receptive_field
-    if T < 1:
-        raise ValueError("Need at least one observation to bootstrap generation.")
-
-    # We need to track up to the last R samples
-    history = initial_obs.new_zeros((B, Q, R))
-    t = min(R, T)
-    # Populate history with recent obs
-    history[..., :t] = initial_obs[..., -t:]
-
+    g = Generator(model)
+    g.update(initial_obs)
     while True:
-        obs = history[..., :t]  # (B,Q,T)
-        logits, _ = model.forward(obs)  # (B,Q,T)
-        recent_logits = logits[..., -1:]  # yield sample for t+1 only (B,Q,1)
-        s = sampler(recent_logits)
-        yield s, recent_logits
-        roll = int(t == R)
-        history = history.roll(-roll, -1)  #
-        #
-        # no-op as long as history is not full
-        t = min(t + 1, R)
-        history[..., t - 1 : t] = encoding.one_hotf(s, quantization_levels=Q)
+        logits = g.step()
+        s = sampler(logits)
+        yield s, logits
+        g.update(s)
 
 
 def generate_fast(

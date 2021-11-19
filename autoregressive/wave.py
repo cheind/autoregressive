@@ -148,6 +148,7 @@ class WaveNetTrainOpts:
     sched_patience: int = 25
     train_ro_horizon: int = 1
     train_ro_num_origins: int = None
+    train_ro_loss_lambda: float = 1.0
     val_ro_horizon: int = 32
     val_ro_num_origins: int = 8
 
@@ -246,17 +247,27 @@ class WaveNet(pl.LightningModule):
         }
 
     def training_step(self, batch, batch_idx):
-        sampler = None
-        if self.train_opts.train_ro_horizon > 1:
-            sampler = sampling.DifferentiableSampler(hard=False)
-
-        loss, acc = self._step(
+        # One-step dense loss
+        one_loss, _ = self._step(
             batch,
-            horizon=self.train_opts.train_ro_horizon,
-            num_origins=self.train_opts.train_ro_num_origins,
-            sampler=sampler,
+            horizon=1,
+            num_origins=None,
+            sampler=None,
         )
 
+        # N-Step unrolling sparse loss
+        n_loss = 0.0
+        if self.train_opts.train_ro_horizon > 1:
+            sampler = sampling.DifferentiableSampler(hard=False)
+            n_loss, _ = self._step(
+                batch,
+                horizon=self.train_opts.train_ro_horizon,
+                num_origins=self.train_opts.train_ro_num_origins,
+                sampler=sampler,
+            )
+
+        # Combine losses
+        loss = one_loss + self.train_opts.train_ro_loss_lambda * n_loss
         self.log("train_loss", loss)
         return {"loss": loss, "train_loss": loss.detach()}
 

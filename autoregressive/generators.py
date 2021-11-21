@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Iterator, List, Tuple
 import torch
 from torch._C import device
 
+from autoregressive import sampling
+
 from . import fast, encoding
 
 if TYPE_CHECKING:
@@ -54,26 +56,34 @@ class RecentBuffer:
 
 
 class Generator:
-    def __init__(self, model: "WaveNet") -> None:
+    def __init__(self, model: "WaveNet", x: torch.Tensor) -> None:
         self.model = model
         self.R = self.model.receptive_field
         self.Q = self.model.quantization_levels
-        self.recent_input = None
+        self.input_wnd = None
+        if x is not None:
+            self.seed(x)
 
-    def update(self, x: torch.Tensor, c: torch.Tensor = None):
+    def seed(self, x: torch.Tensor):
+        B = x.shape[0]
+        self.input_wnd = RecentBuffer(
+            (B, self.Q, self.R), dtype=x.dtype, device=x.device
+        )
+        self._update(x)
+
+    def step(
+        self, x: torch.Tensor, sampler: sampling.ObservationSampler
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        assert self.input_wnd, "seed generator first"
+        self._update(x)
+        logits, _ = self.model.forward(self.input_wnd.buffer)
+        logits = logits[..., -1:]
+        sample = sampler(logits)
+        return sample, logits
+
+    def _update(self, x):
         x = encoding.one_hotf(x, self.Q)
-        B, Q, T = x.shape
-        if self.recent_input is None:
-            # Lazy initialize to infer B and types
-            self.recent_input = RecentBuffer(
-                (B, Q, self.R), dtype=x.dtype, device=x.device
-            )
-        self.recent_input.add(x)
-
-    def step(self) -> torch.Tensor:
-        assert self.recent_input is not None, "Call Generator.update first"
-        logits, _ = self.model.forward(self.recent_input.buffer)
-        return logits[..., -1:]
+        self.input_wnd.add(x)
 
 
 WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
@@ -84,13 +94,12 @@ def generate(
     initial_obs: torch.Tensor,
     sampler: "ObservationSampler",
 ) -> WaveGenerator:
-    g = Generator(model)
-    g.update(initial_obs)
+    g = Generator(model, initial_obs[..., :-1])
+    x = initial_obs[..., -1:]
     while True:
-        logits = g.step()
-        s = sampler(logits)
-        yield s, logits
-        g.update(s)
+        sample, logits = g.step(x, sampler)
+        yield sample, logits
+        x = sample
 
 
 def generate_fast(

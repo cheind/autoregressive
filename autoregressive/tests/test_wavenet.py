@@ -37,6 +37,19 @@ def test_wavenet_layer():
 
 
 @torch.no_grad()
+def test_wavenet_layer_forward_pre_hook():
+    wn = wave.WaveNetLayer(kernel_size=2, dilation=1)
+
+    def myhook(module, input, *args, **kwargs):
+        print("got", input, args, kwargs)
+        return input
+
+    h = wn.register_forward_pre_hook(myhook)
+    wn(torch.rand(1, 32, 1), torch.rand(1, 32, 1))
+    h.remove()
+
+
+@torch.no_grad()
 def test_wavenet_input_layer():
     wn = wave.WaveNetInputLayer(
         kernel_size=5, wave_channels=32, quantization_levels=256

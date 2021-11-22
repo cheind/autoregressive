@@ -8,7 +8,7 @@ import torch.nn
 import torch.nn.functional as F
 import torch.nn.init
 
-from . import fast, generators, sampling, encoding
+from . import generators, sampling, encoding
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -40,7 +40,6 @@ class WaveLayerBase(torch.nn.Module):
         self.kernel_size = kernel_size
         self.dilation = dilation
         self.causal_left_pad = (kernel_size - 1) * dilation
-        self.temporal_queue_size = self.causal_left_pad
         self.in_channels = in_channels
 
 
@@ -69,24 +68,9 @@ class WaveNetLayer(WaveLayerBase):
             kernel_size=1,
         )
 
-    def forward(self, x, h: torch.Tensor = None, causal_pad: bool = True):
-        """
-        When fast is enabled, this function assumes that x is composed
-        of the last 'recurrent' inputs, that is `dilation*(kernel-1)` steps back and
-        the current input.
-        """
-        if h is not None:
-            assert h.shape[-1] == (self.kernel_size - 1)
-            cc = torch.cat((h, x), -1)
-            x_dilated = F.conv1d(
-                cc,
-                self.conv_dilation.weight,
-                self.conv_dilation.bias,
-                dilation=1,
-            )
-        else:
-            p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
-            x_dilated = self.conv_dilation(F.pad(x, p))
+    def forward(self, x, causal_pad: bool = True):
+        p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
+        x_dilated = self.conv_dilation(F.pad(x, p))
         x_filter = torch.tanh(x_dilated[:, : self.wave_channels])
         x_gate = torch.sigmoid(x_dilated[:, self.wave_channels :])
         x_h = x_gate * x_filter
@@ -117,14 +101,9 @@ class WaveNetInputLayer(WaveLayerBase):
             dilation=self.dilation,
         )
 
-    def forward(self, x, h: torch.Tensor = None, causal_pad: bool = True):
-        if h is not None:
-            assert h.shape[-1] == (self.kernel_size - 1)
-            x = torch.cat((h, x), -1)
-        else:
-            p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
-            x = F.pad(x, p)
-        x = self.conv(x)
+    def forward(self, x, causal_pad: bool = True):
+        p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
+        x = self.conv(F.pad(x, p))
         return x, x.new_zeros(*x.shape)  # zeros are not changing head
 
 
@@ -199,36 +178,26 @@ class WaveNet(pl.LightningModule):
         _logger.info(f"Receptive field of WaveNet {self.receptive_field}")
         self.save_hyperparameters()
 
-    def encode(self, x, queues: fast.FastQueues = None, causal_pad: bool = True):
+    def encode(self, x, causal_pad: bool = True):
         x = encoding.one_hotf(x, quantization_levels=self.quantization_levels)
-        if queues is None:
-            queues = [None] * len(self.layers)
 
         skips = []
         layer_inputs = []
         out_queues = []
 
-        for layer, q in zip(self.layers, queues):
+        for layer in self.layers:
             layer: WaveLayerBase
             layer_inputs.append(x)
-            h = None
-            if q is not None:
-                h = fast.read_queue(q, layer.kernel_size - 1, layer.dilation)
-                q = fast.push_queue(q, x)
-            out_queues.append(q)
-            x, skip = layer(x, h=h, causal_pad=causal_pad)
+            x, skip = layer(x, causal_pad=causal_pad)
             skips.append(skip)
 
-        if queues[0] is None:
-            out_queues = None
+        out_queues = None
 
         return x, layer_inputs, skips, out_queues
 
-    def forward(self, x, queues: fast.FastQueues = None, causal_pad: bool = True):
+    def forward(self, x, causal_pad: bool = True):
         # x (B,Q,T) or (B,T)
-        encoded, _, skips, outqueues = self.encode(
-            x, queues=queues, causal_pad=causal_pad
-        )
+        encoded, _, skips, outqueues = self.encode(x, causal_pad=causal_pad)
         return self.logits(encoded, skips), outqueues
 
     def configure_optimizers(self):

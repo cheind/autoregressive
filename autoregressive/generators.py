@@ -1,4 +1,6 @@
 __all__ = [
+    "Generator",
+    "FastGenerator",
     "generate",
     "generate_fast",
     "slice_generator",
@@ -7,26 +9,16 @@ __all__ = [
 ]
 import itertools
 import warnings
-import abc
-from typing import TYPE_CHECKING, Iterator, List, Tuple, Union
 from functools import partial
+from typing import TYPE_CHECKING, Iterator, List, Tuple, Union
 
 import torch
-from torch._C import device
 
-from autoregressive import sampling
-
-from . import fast, encoding
+from . import encoding, sampling
 
 if TYPE_CHECKING:
-    from .wave import WaveNet, WaveLayerBase
     from .sampling import ObservationSampler
-
-
-# class GeneratorBase(abc.ABC):
-#     def __init__(self, model: "WaveNet") -> None:
-#         super().__init__()
-#         self.model = model
+    from .wave import WaveLayerBase, WaveNet
 
 
 class RecentBuffer:
@@ -45,9 +37,13 @@ class RecentBuffer:
 
     def add(self, x: torch.Tensor):
         S = x.shape[-1]
-        if S == 0:
-            return
         N = min(self._T, S)
+        # Both input and queue size can of zero size (temporal). For queues,
+        # consider the queue for the input layer and a kernel size of 1.
+        # When zero, do nothing. Infact the logic below does unintended things
+        # when N==0.
+        if N == 0:
+            return
         self._buf = self._buf.roll(-N, -1)  # create space
         self._buf[..., -N:] = x[..., -N:]  # copy
         self._start = max(0, self._start - N)  # update start
@@ -61,12 +57,11 @@ class RecentBuffer:
 
 
 class Generator:
-    def __init__(self, model: "WaveNet", x: torch.Tensor) -> None:
+    def __init__(self, model: "WaveNet", batch_size: int, device: torch.device) -> None:
         self.model = model
         self.R = self.model.receptive_field
         self.Q = self.model.quantization_levels
-        self.input_buffer = None
-        self._setup(x)
+        self._setup(batch_size, device)
 
     def __enter__(self):
         return self
@@ -75,25 +70,23 @@ class Generator:
         ...
 
     def step(
-        self, x: torch.Tensor, sampler: sampling.ObservationSampler
+        self, nextx: torch.Tensor, sampler: sampling.ObservationSampler
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert self.input_buffer, "seed generator first"
-        self._update(x)
+        self.push(nextx)
         logits, _ = self.model.forward(self.input_buffer.buffer)
         logits = logits[..., -1:]
         sample = sampler(logits)
         return sample, logits
 
-    def _update(self, x):
+    def push(self, x: torch.Tensor):
         x = encoding.one_hotf(x, self.Q)
         self.input_buffer.add(x)
 
-    def _setup(self, x: torch.Tensor):
-        B = x.shape[0]
+    def _setup(self, batch_size: int, device: torch.device):
         self.input_buffer = RecentBuffer(
-            (B, self.Q, self.R), dtype=x.dtype, device=x.device
+            (batch_size, self.Q, self.R), dtype=torch.float32, device=device
         )
-        self._update(x)
 
 
 WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
@@ -104,7 +97,8 @@ def generate(
     initial_obs: torch.Tensor,
     sampler: "ObservationSampler",
 ) -> WaveGenerator:
-    g = Generator(model, initial_obs[..., :-1])
+    g = Generator(model, initial_obs.shape[0], initial_obs.device)
+    g.push(initial_obs[..., :-1])
     nextx = initial_obs[..., -1:]
     with g:
         while True:
@@ -114,16 +108,14 @@ def generate(
 
 
 class FastGenerator:
-    def __init__(
-        self, model: "WaveNet", x: Union[torch.Tensor, list[torch.Tensor]]
-    ) -> None:
+    def __init__(self, model: "WaveNet", batch_size: int, device: torch.device) -> None:
         self.model = model
         self.R = self.model.receptive_field
         self.Q = self.model.quantization_levels
-        self.input_queues = None
         self._hooks_enabled = False  # make thread local?
         self._hook_handles = None
-        self._setup_queues(x)
+        self.input_queues = None
+        self._setup_queues(batch_size, device)
 
     def __enter__(self):
         self._setup_hooks()
@@ -143,20 +135,29 @@ class FastGenerator:
         self._hooks_enabled = False
         return sample, logits
 
-    def _setup_queues(self, x: Union[torch.Tensor, list[torch.Tensor]]):
-        is_raw_input = isinstance(x, torch.Tensor)
-
-        if is_raw_input:
-            self.input_queues = self._make_queues(x.shape[0], x.dtype, x.device)
+    def push(self, x: Union[torch.Tensor, list[torch.Tensor]]):
+        is_tensor = isinstance(x, torch.Tensor)
+        if is_tensor:
             if x.shape[-1] > 0:
                 start = max(0, x.shape[-1] - self.R)
                 _, layer_inputs, _, _ = self.model.encode(x[..., start:])
                 self._update_queues(layer_inputs)
         else:
-            self.input_queues = self._make_queues(
-                x[0].shape[0], x[0].dtype, x[0].device
-            )
-            self._update_queues(x)
+            layer_inputs = x
+            self._update_queues(layer_inputs)
+
+    def _setup_queues(self, batch_size: int, device: torch.device):
+        queues = []
+        for layer in self.model.layers:
+            layer: "WaveLayerBase"
+            q = RecentBuffer(
+                (batch_size, layer.in_channels, layer.causal_left_pad),
+                dtype=torch.float32,
+                device=device,
+                empty=False,
+            )  # Populated with zeros will act like causal padding
+            queues.append(q)
+        self.input_queues = queues
 
     def _update_queues(self, layer_inputs: list[torch.Tensor]):
         for linp, q in zip(layer_inputs, self.input_queues):
@@ -169,7 +170,6 @@ class FastGenerator:
                 input = list(input)
                 x = input[0]
                 y = torch.cat((q.buffer, x), -1)
-                # print(q.buffer.shape, x.shape, y.shape)
                 q.add(x)
                 input[0] = y
                 input = tuple(input)
@@ -186,21 +186,6 @@ class FastGenerator:
             for h in self._hook_handles:
                 h.remove()
 
-    def _make_queues(
-        self, batch_size: int, dtype: torch.dtype, device: torch.device
-    ) -> List[RecentBuffer]:
-        queues = []
-        for layer in self.model.layers:
-            layer: "WaveLayerBase"
-            q = RecentBuffer(
-                (batch_size, layer.in_channels, layer.causal_left_pad),
-                dtype=dtype,
-                device=device,
-                empty=False,
-            )  # Populated with zeros will act like causal padding
-            queues.append(q)
-        return queues
-
 
 def generate_fast(
     model: "WaveNet",
@@ -208,37 +193,18 @@ def generate_fast(
     sampler: "ObservationSampler",
     layer_inputs: List[torch.Tensor] = None,
 ) -> WaveGenerator:
-    # In case we have compressed input, we convert to one-hot style.
-    Q = model.quantization_levels
-    R = model.receptive_field
-    initial_obs = encoding.one_hotf(initial_obs, quantization_levels=Q)
-    B, _, T = initial_obs.shape
-    if T < 1:
-        raise ValueError("Need at least one observation to bootstrap.")
-    # prepare queues
-    if T == 1:
-        queues = fast.create_zero_queues(
-            model=model,
-            device=initial_obs.device,
-            dtype=initial_obs.dtype,
-            batch_size=B,
-        )
+
+    g = FastGenerator(model, initial_obs.shape[0], initial_obs.device)
+    if layer_inputs is not None:
+        g.push([layer[..., :-1] for layer in layer_inputs])
     else:
-        start = max(0, T - R)
-        end = T - 1
-        if layer_inputs is None:
-            _, layer_inputs, _, _ = model.encode(initial_obs[..., start:end])
-        else:
-            layer_inputs = [inp[..., start:end] for inp in layer_inputs]
-        # create queues
-        queues = fast.create_initialized_queues(model=model, layer_inputs=layer_inputs)
-    # start generating beginning with most recent observation
-    obs = initial_obs[..., -1:]  # (B,Q,1)
-    while True:
-        logits, queues = model.forward(obs, queues)
-        s = sampler(logits)  # (B,Q,1) or (B,Q)
-        yield s, logits
-        obs = encoding.one_hotf(s, quantization_levels=Q)  # (B,Q,1)
+        g.push(initial_obs[..., :-1])
+    nextx = initial_obs[..., -1:]
+    with g:
+        while True:
+            sample, logits = g.step(nextx, sampler)
+            yield sample, logits
+            nextx = sample
 
 
 def slice_generator(

@@ -119,13 +119,19 @@ def test_fast_generators():
 
     # Next, we compare the initial generator prediction to net output y. This can be
     # done as generators produce as first prediction the net result of first observation. # noqa:E501
-    for i in range(1, 16):
+    for i in range(0, 16):
         gslow = generators.generate(net, x[..., : (i + 1)], sampler=identity_sampler)
+        gfast = generators.generate_fast(
+            net, x[..., : (i + 1)], sampler=identity_sampler
+        )
         yslow_samples, yslow_logits = generators.slice_generator(gslow, 1)  # predict 1
-        with generators.FastGenerator(net, x[..., :i]) as gen:
-            yfast_samples, yfast_logits = gen.step(
-                x[..., i : i + 1], sampler=identity_sampler
-            )
+        yfast_samples, yfast_logits = generators.slice_generator(gfast, 1)  # predict 1
+        # with generators.FastGenerator(net, x.shape[0], x.device) as gen:
+        #     gen.push(x[..., :i])
+        #     yfast_samples, yfast_logits = gen.step(
+        #         x[..., i : i + 1], sampler=identity_sampler
+        #     )
+        print(yfast_samples, yslow_samples)
         # assert torch.allclose(yslow_samples.squeeze(), y[..., i].squeeze(), atol=1e-4)
         # assert torch.allclose(yslow_outputs.squeeze(), y[..., i].squeeze(), atol=1e-4)
         # assert torch.allclose(yfast_samples.squeeze(), y[..., i].squeeze(), atol=1e-4)

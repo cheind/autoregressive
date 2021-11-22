@@ -31,22 +31,12 @@ def test_wavenet_layer():
     x, skip = wn(torch.rand(1, 32, 1))
     assert x.shape == (1, 32, 1)
     assert skip.shape == (1, 32, 1)
-    x, skip = wn(torch.rand(1, 32, 1), h=torch.rand(1, 32, 1))
+
+    # disable padding
+    wn = wave.WaveNetLayer(kernel_size=2, dilation=4)
+    x, skip = wn(torch.rand(1, 32, 5), causal_pad=False)
     assert x.shape == (1, 32, 1)
     assert skip.shape == (1, 32, 1)
-
-
-@torch.no_grad()
-def test_wavenet_layer_forward_pre_hook():
-    wn = wave.WaveNetLayer(kernel_size=2, dilation=1)
-
-    def myhook(module, input, *args, **kwargs):
-        print("got", input, args, kwargs)
-        return input
-
-    h = wn.register_forward_pre_hook(myhook)
-    wn(torch.rand(1, 32, 1), torch.rand(1, 32, 1))
-    h.remove()
 
 
 @torch.no_grad()
@@ -58,7 +48,9 @@ def test_wavenet_input_layer():
     x, skip = wn(torch.rand(1, 256, 1))
     assert x.shape == (1, 32, 1)
     assert skip.shape == (1, 32, 1)
-    x, skip = wn(torch.rand(1, 256, 1), h=torch.rand(1, 256, 4))
+
+    # disable padding
+    x, skip = wn(torch.rand(1, 256, 5), causal_pad=False)
     assert x.shape == (1, 32, 1)
     assert skip.shape == (1, 32, 1)
 
@@ -75,7 +67,7 @@ def test_wavenet_encode():
     R = wn.receptive_field
     assert R == 8
     x = torch.rand(2, 4, 10)
-    e, inputs, skips, outqueues = wn.encode(x, queues=None)
+    e, inputs, skips, outqueues = wn.encode(x)
     assert outqueues is None
     assert e.shape == (2, 8, 10)
     assert len(inputs) == len(skips) == 1 + 3  # +1for input layer
@@ -99,7 +91,7 @@ def test_wavenet_encode():
     R = wn.receptive_field
     assert R == 12
     x = torch.rand(2, 4, 14)
-    e, inputs, skips, outqueues = wn.encode(x, queues=None)
+    e, inputs, skips, outqueues = wn.encode(x)
     assert outqueues is None
     assert e.shape == (2, 8, 14)
     assert len(inputs) == len(skips) == 1 + 3  # +1for input layer
@@ -119,7 +111,7 @@ def test_wavenet_encode():
             [2, 3, 1],
         ]
     )  # (B,T)
-    e, inputs, skips, outqueues = wn.encode(x, queues=None)
+    e, inputs, skips, outqueues = wn.encode(x)
     assert outqueues is None
     assert e.shape == (2, 8, 3)
     assert len(inputs) == len(skips) == 1 + 3  # +1for input layer

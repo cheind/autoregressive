@@ -140,7 +140,7 @@ class FastGenerator:
         if is_tensor:
             if x.shape[-1] > 0:
                 start = max(0, x.shape[-1] - self.R)
-                _, layer_inputs, _, _ = self.model.encode(x[..., start:])
+                _, layer_inputs, _ = self.model.encode(x[..., start:])
                 self._update_queues(layer_inputs)
         else:
             layer_inputs = x
@@ -244,7 +244,7 @@ def rolling_origin(
         else:
             roll_idx = roll_idx[:num_origins]
 
-    _, layer_inputs, _, _ = model.encode(obs)
+    _, layer_inputs, _ = model.encode(obs)
 
     all_roll_samples = []
     all_roll_logits = []

@@ -183,7 +183,6 @@ class WaveNet(pl.LightningModule):
 
         skips = []
         layer_inputs = []
-        out_queues = []
 
         for layer in self.layers:
             layer: WaveLayerBase
@@ -191,14 +190,12 @@ class WaveNet(pl.LightningModule):
             x, skip = layer(x, causal_pad=causal_pad)
             skips.append(skip)
 
-        out_queues = None
-
-        return x, layer_inputs, skips, out_queues
+        return x, layer_inputs, skips
 
     def forward(self, x, causal_pad: bool = True):
         # x (B,Q,T) or (B,T)
-        encoded, _, skips, outqueues = self.encode(x, causal_pad=causal_pad)
-        return self.logits(encoded, skips), outqueues
+        encoded_result = self.encode(x, causal_pad=causal_pad)
+        return self.logits(encoded_result[0], encoded_result[2]), encoded_result
 
     def configure_optimizers(self):
         import torch.optim.lr_scheduler as sched

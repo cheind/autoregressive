@@ -92,7 +92,7 @@ def test_generators():
     # Finally, we check verify that providing pre-computed layerinputs
     # gives same result as compared when not providing it.
     gslow = generators.generate(net, x, sampler=identity_sampler)
-    _, layer_inputs, _, _ = net.encode(x)
+    _, layer_inputs, _ = net.encode(x)
     gfast = generators.generate_fast(
         net, x, sampler=identity_sampler, layer_inputs=layer_inputs
     )

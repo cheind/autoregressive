@@ -67,8 +67,7 @@ def test_wavenet_encode():
     R = wn.receptive_field
     assert R == 8
     x = torch.rand(2, 4, 10)
-    e, inputs, skips, outqueues = wn.encode(x)
-    assert outqueues is None
+    e, inputs, skips = wn.encode(x)
     assert e.shape == (2, 8, 10)
     assert len(inputs) == len(skips) == 1 + 3  # +1for input layer
     assert all([s.shape == (2, 8, 10) for s in skips])
@@ -76,8 +75,8 @@ def test_wavenet_encode():
     assert inputs[0].shape == x.shape
 
     # assert not leakage of data
-    e, _, _, _ = wn.encode(x)
-    e2, _, _, _ = wn.encode(x[..., 0:R])
+    e, _, _ = wn.encode(x)
+    e2, _, _ = wn.encode(x[..., 0:R])
     assert torch.allclose(e2[..., -1], e[..., 7])
 
     # larger input conv
@@ -91,8 +90,7 @@ def test_wavenet_encode():
     R = wn.receptive_field
     assert R == 12
     x = torch.rand(2, 4, 14)
-    e, inputs, skips, outqueues = wn.encode(x)
-    assert outqueues is None
+    e, inputs, skips = wn.encode(x)
     assert e.shape == (2, 8, 14)
     assert len(inputs) == len(skips) == 1 + 3  # +1for input layer
     assert all([s.shape == (2, 8, 14) for s in skips])
@@ -100,8 +98,8 @@ def test_wavenet_encode():
     assert inputs[0].shape == x.shape
 
     # assert not leakage of data
-    e, _, _, _ = wn.encode(x)
-    e2, _, _, _ = wn.encode(x[..., 0:R])
+    e, _, _ = wn.encode(x)
+    e2, _, _ = wn.encode(x[..., 0:R])
     assert torch.allclose(e2[..., -1], e[..., R - 1])
 
     # assert it works with sparse encoding as well
@@ -111,8 +109,7 @@ def test_wavenet_encode():
             [2, 3, 1],
         ]
     )  # (B,T)
-    e, inputs, skips, outqueues = wn.encode(x)
-    assert outqueues is None
+    e, inputs, skips = wn.encode(x)
     assert e.shape == (2, 8, 3)
     assert len(inputs) == len(skips) == 1 + 3  # +1for input layer
     assert all([s.shape == (2, 8, 3) for s in skips])

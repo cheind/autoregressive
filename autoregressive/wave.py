@@ -297,8 +297,8 @@ class WaveNet(pl.LightningModule):
             logits, _ = self.forward(inputs, c=global_cond)
             if self.train_opts.skip_partial:
                 r = self.receptive_field
-                logits = logits[..., :-r]
-                targets = inputs[..., r:]
+                logits = logits[..., r:]
+                targets = targets[..., r:]
         else:
             _, logits, ridx = generators.rolling_origin(
                 self,

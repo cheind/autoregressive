@@ -14,6 +14,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Iterator, List, Tuple, Union
 
 import torch
+from torch.nn import init
 
 from . import encoding, sampling
 
@@ -64,6 +65,7 @@ class Generator:
         self.model = model
         self.R = self.model.receptive_field
         self.Q = self.model.quantization_levels
+        self.C = self.model.conditioning_channels
         self._setup(batch_size, device)
 
     def __enter__(self):
@@ -73,23 +75,40 @@ class Generator:
         ...
 
     def step(
-        self, nextx: torch.Tensor, sampler: sampling.ObservationSampler
+        self,
+        x: torch.Tensor,
+        sampler: sampling.ObservationSampler,
+        c: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert self.input_buffer, "seed generator first"
-        self.push(nextx)
-        logits, _ = self.model.forward(self.input_buffer.buffer)
+        self.push(x, c)
+        logits, _ = self.model.forward(
+            self.input_buffer.buffer,
+            c=self.cond_buffer.buffer if self.cond_buffer else None,
+        )
         logits = logits[..., -1:]
         sample = sampler(logits)
         return sample, logits
 
-    def push(self, x: torch.Tensor):
+    def push(self, x: torch.Tensor, c: torch.Tensor = None):
         x = encoding.one_hotf(x, self.Q)
         self.input_buffer.add(x)
+        if self.cond_buffer:
+            assert c is not None, "conditioning required"
+            if c.shape[-1] == 1:
+                # convert global condition to local
+                c = c.repeat(1, 1, x.shape[-1])
+            self.cond_buffer.add(c)
 
     def _setup(self, batch_size: int, device: torch.device):
         self.input_buffer = RecentBuffer(
             (batch_size, self.Q, self.R), dtype=torch.float32, device=device
         )
+        self.cond_buffer = None
+        if self.C:
+            self.cond_buffer = RecentBuffer(
+                (batch_size, self.C, self.R), dtype=torch.float32, device=device
+            )
 
 
 class FastGenerator:
@@ -111,21 +130,24 @@ class FastGenerator:
         self._remove_hooks()
 
     def step(
-        self, x: torch.Tensor, sampler: sampling.ObservationSampler
+        self,
+        x: torch.Tensor,
+        sampler: sampling.ObservationSampler,
+        c: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert self._hook_handles, "enter generator context first"
         with self._enable_hooks():
-            logits, _ = self.model.forward(x, causal_pad=False)
+            logits, _ = self.model.forward(x, c=c, causal_pad=False)
         logits = logits[..., -1:]
         sample = sampler(logits)
         return sample, logits
 
-    def push(self, x: Union[torch.Tensor, list[torch.Tensor]]):
+    def push(self, x: Union[torch.Tensor, list[torch.Tensor]], c: torch.Tensor = None):
         is_tensor = isinstance(x, torch.Tensor)
         if is_tensor:
             if x.shape[-1] > 0:
                 start = max(0, x.shape[-1] - self.R)
-                _, layer_inputs, _ = self.model.encode(x[..., start:])
+                _, layer_inputs, _ = self.model.encode(x[..., start:], c=c)
                 self._update_queues(layer_inputs)
         else:
             layer_inputs = x
@@ -185,13 +207,14 @@ def generate(
     model: "WaveNet",
     initial_obs: torch.Tensor,
     sampler: "ObservationSampler",
+    global_cond: torch.Tensor = None,
 ) -> WaveGenerator:
     g = Generator(model, initial_obs.shape[0], initial_obs.device)
-    g.push(initial_obs[..., :-1])
+    g.push(initial_obs[..., :-1], c=global_cond)
     nextx = initial_obs[..., -1:]
     with g:
         while True:
-            sample, logits = g.step(nextx, sampler)
+            sample, logits = g.step(nextx, sampler, c=global_cond)
             yield sample, logits
             nextx = sample
 
@@ -201,17 +224,18 @@ def generate_fast(
     initial_obs: torch.Tensor,
     sampler: "ObservationSampler",
     layer_inputs: List[torch.Tensor] = None,
+    global_cond: torch.Tensor = None,
 ) -> WaveGenerator:
 
     g = FastGenerator(model, initial_obs.shape[0], initial_obs.device)
     if layer_inputs is not None:
-        g.push([layer[..., :-1] for layer in layer_inputs])
+        g.push([layer[..., :-1] for layer in layer_inputs], c=global_cond)
     else:
-        g.push(initial_obs[..., :-1])
+        g.push(initial_obs[..., :-1], c=global_cond)
     nextx = initial_obs[..., -1:]
     with g:
         while True:
-            sample, logits = g.step(nextx, sampler)
+            sample, logits = g.step(nextx, sampler, c=global_cond)
             yield sample, logits
             nextx = sample
 
@@ -236,6 +260,7 @@ def rolling_origin(
     num_origins: int = None,
     random_origins: bool = False,
     skip_partial: bool = True,
+    global_cond: torch.Tensor = None,
 ):
     # See https://cran.r-project.org/web/packages/greybox/vignettes/ro.html
     T, R = obs.shape[-1], model.receptive_field
@@ -253,7 +278,7 @@ def rolling_origin(
         else:
             roll_idx = roll_idx[:num_origins]
 
-    _, layer_inputs, _ = model.encode(obs)
+    _, layer_inputs, _ = model.encode(obs, c=global_cond)
 
     all_roll_samples = []
     all_roll_logits = []
@@ -262,10 +287,7 @@ def rolling_origin(
         roll_inputs = [layer[..., : (ridx + 1)] for layer in layer_inputs]
 
         gen = generate_fast(
-            model,
-            roll_obs,
-            sampler,
-            layer_inputs=roll_inputs,
+            model, roll_obs, sampler, layer_inputs=roll_inputs, global_cond=global_cond
         )
         roll_samples, roll_logits = slice_generator(gen, horizon)
         all_roll_logits.append(roll_logits)

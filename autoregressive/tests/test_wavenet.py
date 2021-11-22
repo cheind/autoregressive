@@ -1,4 +1,5 @@
 import torch
+import pytest
 
 from .. import wave
 
@@ -38,6 +39,19 @@ def test_wavenet_layer():
     assert x.shape == (1, 32, 1)
     assert skip.shape == (1, 32, 1)
 
+    # conditioning
+    wn = wave.WaveNetLayer(kernel_size=2, dilation=4, cond_channels=5)
+    with pytest.raises(AssertionError):
+        x, skip = wn(torch.rand(1, 32, 5))  # no cond. supplied
+    x, skip = wn(torch.rand(1, 32, 3), c=torch.rand(1, 5, 1))  # global cond
+    assert x.shape == skip.shape == (1, 32, 3)
+    x, skip = wn(torch.rand(1, 32, 3), c=torch.rand(1, 5, 3))  # local cond
+    assert x.shape == skip.shape == (1, 32, 3)
+    x, skip = wn(
+        torch.rand(1, 32, 5), c=torch.rand(1, 5, 1), causal_pad=False
+    )  # local cond, no pad (on input, not condition)
+    assert x.shape == skip.shape == (1, 32, 1)
+
 
 @torch.no_grad()
 def test_wavenet_input_layer():
@@ -51,6 +65,11 @@ def test_wavenet_input_layer():
 
     # disable padding
     x, skip = wn(torch.rand(1, 256, 5), causal_pad=False)
+    assert x.shape == (1, 32, 1)
+    assert skip.shape == (1, 32, 1)
+
+    # condition, not used by layer, but passed in via caller
+    x, skip = wn(torch.rand(1, 256, 5), c=torch.rand(1, 1, 1), causal_pad=False)
     assert x.shape == (1, 32, 1)
     assert skip.shape == (1, 32, 1)
 
@@ -79,18 +98,20 @@ def test_wavenet_encode():
     e2, _, _ = wn.encode(x[..., 0:R])
     assert torch.allclose(e2[..., -1], e[..., 7])
 
-    # larger input conv
+    # larger input conv and conditioning
     wn = wave.WaveNet(
         quantization_levels=4,
         wave_dilations=[1, 2, 4],
         wave_kernel_size=2,
         wave_channels=8,
+        cond_channels=3,
         input_kernel_size=5,
     )
     R = wn.receptive_field
     assert R == 12
     x = torch.rand(2, 4, 14)
-    e, inputs, skips = wn.encode(x)
+    c = torch.rand(1, 3, 1)  # global cond
+    e, inputs, skips = wn.encode(x, c=c)
     assert e.shape == (2, 8, 14)
     assert len(inputs) == len(skips) == 1 + 3  # +1for input layer
     assert all([s.shape == (2, 8, 14) for s in skips])
@@ -98,8 +119,8 @@ def test_wavenet_encode():
     assert inputs[0].shape == x.shape
 
     # assert not leakage of data
-    e, _, _ = wn.encode(x)
-    e2, _, _ = wn.encode(x[..., 0:R])
+    e, _, _ = wn.encode(x, c=c)
+    e2, _, _ = wn.encode(x[..., 0:R], c=c)
     assert torch.allclose(e2[..., -1], e[..., R - 1])
 
     # assert it works with sparse encoding as well
@@ -109,7 +130,7 @@ def test_wavenet_encode():
             [2, 3, 1],
         ]
     )  # (B,T)
-    e, inputs, skips = wn.encode(x)
+    e, inputs, skips = wn.encode(x, c=c)
     assert e.shape == (2, 8, 3)
     assert len(inputs) == len(skips) == 1 + 3  # +1for input layer
     assert all([s.shape == (2, 8, 3) for s in skips])

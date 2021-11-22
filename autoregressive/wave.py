@@ -49,6 +49,7 @@ class WaveNetLayer(WaveLayerBase):
         kernel_size: int,
         dilation: int,
         wave_channels: int = 32,
+        cond_channels: int = None,
     ):
         super().__init__(
             kernel_size=kernel_size,
@@ -56,6 +57,7 @@ class WaveNetLayer(WaveLayerBase):
             in_channels=wave_channels,
         )
         self.wave_channels = wave_channels
+        self.cond_channels = cond_channels
         self.conv_dilation = torch.nn.Conv1d(
             wave_channels,
             2 * wave_channels,  # We stack W f,k and W g,k, similar to PixelCNN
@@ -67,10 +69,20 @@ class WaveNetLayer(WaveLayerBase):
             wave_channels,
             kernel_size=1,
         )
+        if cond_channels is not None:
+            self.conv_cond = torch.nn.Conv1d(
+                cond_channels,
+                wave_channels * 2,
+                kernel_size=1,
+            )
 
-    def forward(self, x, causal_pad: bool = True):
+    def forward(self, x: torch.Tensor, c: torch.Tensor = None, causal_pad: bool = True):
         p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
         x_dilated = self.conv_dilation(F.pad(x, p))
+        if self.cond_channels:
+            assert c is not None, "conditioning required"
+            x_cond = self.conv_cond(c)
+            x_dilated = x_dilated + x_cond
         x_filter = torch.tanh(x_dilated[:, : self.wave_channels])
         x_gate = torch.sigmoid(x_dilated[:, self.wave_channels :])
         x_h = x_gate * x_filter
@@ -101,7 +113,8 @@ class WaveNetInputLayer(WaveLayerBase):
             dilation=self.dilation,
         )
 
-    def forward(self, x, causal_pad: bool = True):
+    def forward(self, x, c: torch.Tensor = None, causal_pad: bool = True):
+        del c
         p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
         x = self.conv(F.pad(x, p))
         return x, x.new_zeros(*x.shape)  # zeros are not changing head
@@ -144,6 +157,7 @@ class WaveNet(pl.LightningModule):
         wave_dilations: list[int] = [2 ** i for i in range(8)] * 2,
         wave_kernel_size: int = 2,
         wave_channels: int = 32,
+        cond_channels: int = None,
         input_kernel_size: int = 1,
         train_opts: WaveNetTrainOpts = WaveNetTrainOpts(),
     ):
@@ -160,6 +174,7 @@ class WaveNet(pl.LightningModule):
                 kernel_size=wave_kernel_size,
                 dilation=d,
                 wave_channels=wave_channels,
+                cond_channels=cond_channels,
             )
             for d in wave_dilations
         ]
@@ -169,6 +184,7 @@ class WaveNet(pl.LightningModule):
             out_channels=quantization_levels,
         )
         self.quantization_levels = quantization_levels
+        self.conditioning_channels = cond_channels
         self.train_opts = train_opts
         self.receptive_field = compute_receptive_field(
             kernel_sizes=[layer.kernel_size for layer in self.layers],
@@ -178,7 +194,7 @@ class WaveNet(pl.LightningModule):
         _logger.info(f"Receptive field of WaveNet {self.receptive_field}")
         self.save_hyperparameters()
 
-    def encode(self, x, causal_pad: bool = True):
+    def encode(self, x, c: torch.Tensor = None, causal_pad: bool = True):
         x = encoding.one_hotf(x, quantization_levels=self.quantization_levels)
 
         skips = []
@@ -187,14 +203,15 @@ class WaveNet(pl.LightningModule):
         for layer in self.layers:
             layer: WaveLayerBase
             layer_inputs.append(x)
-            x, skip = layer(x, causal_pad=causal_pad)
+            x, skip = layer(x, c=c, causal_pad=causal_pad)
             skips.append(skip)
 
         return x, layer_inputs, skips
 
-    def forward(self, x, causal_pad: bool = True):
+    def forward(self, x, c: torch.Tensor = None, causal_pad: bool = True):
         # x (B,Q,T) or (B,T)
-        encoded_result = self.encode(x, causal_pad=causal_pad)
+        # c None, (B,C,T) or (B,C,1)
+        encoded_result = self.encode(x, c=c, causal_pad=causal_pad)
         return self.logits(encoded_result[0], encoded_result[2]), encoded_result
 
     def configure_optimizers(self):
@@ -269,9 +286,12 @@ class WaveNet(pl.LightningModule):
         series, _ = batch
         inputs: torch.Tensor = series["x"][..., :-1]  # (B,T)
         targets: torch.Tensor = series["x"][..., 1:]  # (B,T)
+        conds = None
+        if "c" in series:
+            conds = series["c"]  # (B,C,T)
 
         if horizon == 1:
-            logits, _ = self.forward(inputs)
+            logits, _ = self.forward(inputs, c=conds)
             if self.train_opts.skip_partial:
                 r = self.receptive_field
                 logits = logits[..., :-r]

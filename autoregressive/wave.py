@@ -292,7 +292,6 @@ class WaveNet(pl.LightningModule):
             # until we figure out how to implement local conditioning nicely
             # in functional generators and rolling origin.
             global_cond = series["c"].float()
-            print(global_cond.argmax(1).squeeze())
 
         if horizon == 1:
             logits, _ = self.forward(inputs, c=global_cond)

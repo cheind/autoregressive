@@ -10,12 +10,14 @@ import dataclasses
 
 import torch
 import torch.utils.data
+import torch.nn.functional as F
 import pytorch_lightning as pl
 
 from autoregressive import signal
 
 from . import series_dataset as sd
 from .fourier import fseries_amp_phase, PI
+from .transforms import chain_transforms
 
 FloatOrFloatRange = Union[float, Tuple[float, float]]
 IntOrIntRange = Union[int, Tuple[int, int]]
@@ -122,6 +124,14 @@ class FSeriesDataset(sd.SeriesDataset):
         }
 
 
+def add_period_conditioning(sm: sd.SeriesMeta, max_period: int = 20) -> sd.SeriesMeta:
+    series, meta = sm
+    p = torch.round(meta["period"]).long()
+    p = F.one_hot(p, num_classes=max_period + 1).permute(1, 0)
+    series["c"] = p
+    return series, meta
+
+
 class FSeriesDataModule(pl.LightningDataModule):
     def __init__(
         self,
@@ -130,6 +140,7 @@ class FSeriesDataModule(pl.LightningDataModule):
         num_workers: int = 0,
         train_params: FSeriesParams = FSeriesParams(smoothness=0.75),
         val_params: FSeriesParams = None,
+        period_conditioning: bool = False,
     ):
         super().__init__()
 
@@ -140,13 +151,15 @@ class FSeriesDataModule(pl.LightningDataModule):
         train_ds = FSeriesDataset(train_params)
         val_ds = FSeriesDataset(val_params)
         signal_range = sd.dataset_minmax(train_ds, val_ds)
-        self.transform = signal.SignalProcessor(
+        transform = signal.SignalProcessor(
             quantization_levels=quantization_levels,
             signal_low=signal_range[0],
             signal_high=signal_range[1],
         )
-        self.train_ds = FSeriesDataset(train_params, transform=self.transform)
-        self.val_ds = FSeriesDataset(val_params, transform=self.transform)
+        if period_conditioning:
+            transform = chain_transforms(transform, add_period_conditioning)
+        self.train_ds = FSeriesDataset(train_params, transform=transform)
+        self.val_ds = FSeriesDataset(val_params, transform=transform)
         self.quantization_levels = quantization_levels
         self.train_params = train_params
         self.val_params = val_params
@@ -171,9 +184,6 @@ class FSeriesDataModule(pl.LightningDataModule):
             shuffle=False,
             collate_fn=sd.series_collate,
         )
-
-    def signal_processor(self) -> signal.SignalProcessor:
-        return self.transform
 
     def __str__(self) -> str:
         return f"train_params: {self.train_params}\n val_params:{self.val_params}"

@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from typing import Any, Callable, Dict, Tuple, Union
 from functools import partial
 import dataclasses
+import logging
 
 import torch
 import torch.utils.data
@@ -22,6 +23,9 @@ from .transforms import chain_transforms
 
 FloatOrFloatRange = Union[float, Tuple[float, float]]
 IntOrIntRange = Union[int, Tuple[int, int]]
+
+_logger = logging.getLogger("pytorch_lightning")
+_logger.setLevel(logging.INFO)
 
 
 @dataclasses.dataclass
@@ -162,6 +166,8 @@ class FSeriesDataModule(pl.LightningDataModule):
             signal_high=signal_range[1],
         )
         if period_conditioning:
+            cr = int(train_params.period_range[1] - train_params.period_range[0])
+            _logger.info(f"Added period conditioning: {cr} condition channels required")
             transform = chain_transforms(
                 transform,
                 partial(

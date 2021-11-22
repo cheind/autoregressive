@@ -102,7 +102,7 @@ class FSeriesDataset(sd.SeriesDataset):
         terms = torch.randint(
             self.fterm_range[0], self.fterm_range[1] + 1, (1,), generator=g
         ).item()
-        period = uniform(self.period_range, 1)
+        period = uniform(self.period_range, 1).int()
         bias = uniform(self.bias_range, 1)
         coeffs = uniform(self.coeff_range, terms)
         coeffs = coeffs * torch.logspace(

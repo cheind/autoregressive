@@ -6,6 +6,7 @@ import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch.functional import Tensor
 import torch.utils.data
 import pytorch_lightning as pl
 from mpl_toolkits.axes_grid1 import ImageGrid
@@ -68,11 +69,16 @@ def load_model(cli: ForecastLightningCLI) -> wave.WaveNet:
     return model.eval()
 
 
-def create_obs(cli: ForecastLightningCLI) -> torch.Tensor:
+def create_input(cli: ForecastLightningCLI) -> tuple[torch.Tensor, torch.Tensor]:
     dm = cli.datamodule
     dl = dm.val_dataloader()
     series_batch, _ = next(iter(dl))
-    return series_batch["x"][: cli.config["num_curves"]]
+
+    N = cli.config["num_curves"]
+    obs = series_batch["x"][:N]
+    cond = series_batch["c"][:N] if "c" in series_batch else None
+
+    return obs, cond
 
 
 def create_sampler(cli: ForecastLightningCLI) -> sampling.ObservationSampler:
@@ -112,7 +118,9 @@ def main():
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = load_model(cli).to(dev)
     sampler = create_sampler(cli)
-    obs = create_obs(cli).to(dev)
+    obs, cond = create_input(cli)
+    obs = obs.to(dev)
+    cond = cond.to(dev) if cond is not None else None
 
     num_obs = cfg["num_obs"] or model.receptive_field
     horizon = cfg["horizon"] or model.receptive_field * 2
@@ -125,12 +133,14 @@ def main():
             model=model,
             initial_obs=obs[..., :num_obs],
             sampler=sampler,
+            global_cond=cond,
         )
     else:
         g = generators.generate(
             model=model,
             initial_obs=obs[..., :num_obs],
             sampler=sampler,
+            global_cond=cond,
         )
     t0 = time.time()
     trajs, _ = generators.slice_generator(g, stop=horizon)  # (B,T)

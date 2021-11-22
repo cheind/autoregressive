@@ -128,7 +128,7 @@ def add_period_conditioning(sm: sd.SeriesMeta, max_period: int = 20) -> sd.Serie
     series, meta = sm
     p = torch.round(meta["period"]).long()
     p = F.one_hot(p, num_classes=max_period + 1).permute(1, 0)
-    series["c"] = p
+    series["c"] = p.float()
     return series, meta
 
 

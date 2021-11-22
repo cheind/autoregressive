@@ -167,7 +167,9 @@ class FSeriesDataModule(pl.LightningDataModule):
         )
         if period_conditioning:
             cr = int(train_params.period_range[1] - train_params.period_range[0])
-            _logger.info(f"Added period conditioning: {cr} condition channels required")
+            _logger.info(
+                f"Added period conditioning: {cr+1} condition channels required"
+            )
             transform = chain_transforms(
                 transform,
                 partial(

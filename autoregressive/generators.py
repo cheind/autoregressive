@@ -8,7 +8,8 @@ __all__ = [
 import itertools
 import warnings
 import abc
-from typing import TYPE_CHECKING, Iterator, List, Tuple
+from typing import TYPE_CHECKING, Iterator, List, Tuple, Union
+from functools import partial
 
 import torch
 from torch._C import device
@@ -18,7 +19,7 @@ from autoregressive import sampling
 from . import fast, encoding
 
 if TYPE_CHECKING:
-    from .wave import WaveNet
+    from .wave import WaveNet, WaveLayerBase
     from .sampling import ObservationSampler
 
 
@@ -32,11 +33,15 @@ class RecentBuffer:
     """A simple deque (with max-size) implemented using a torch.Tensor"""
 
     def __init__(
-        self, shape: torch.Size, dtype: torch.dtype = None, device: torch.device = None
+        self,
+        shape: torch.Size,
+        dtype: torch.dtype = None,
+        device: torch.device = None,
+        empty: bool = True,
     ):
         self._buf = torch.zeros(shape, dtype=dtype, device=device)  # (B,Q,T)
         self._T = self._buf.shape[-1]
-        self._start = self._T
+        self._start = self._T if empty else 0
 
     def add(self, x: torch.Tensor):
         S = x.shape[-1]
@@ -60,30 +65,35 @@ class Generator:
         self.model = model
         self.R = self.model.receptive_field
         self.Q = self.model.quantization_levels
-        self.input_wnd = None
-        if x is not None:
-            self.seed(x)
+        self.input_buffer = None
+        self._setup(x)
 
-    def seed(self, x: torch.Tensor):
-        B = x.shape[0]
-        self.input_wnd = RecentBuffer(
-            (B, self.Q, self.R), dtype=x.dtype, device=x.device
-        )
-        self._update(x)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        ...
 
     def step(
         self, x: torch.Tensor, sampler: sampling.ObservationSampler
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        assert self.input_wnd, "seed generator first"
+        assert self.input_buffer, "seed generator first"
         self._update(x)
-        logits, _ = self.model.forward(self.input_wnd.buffer)
+        logits, _ = self.model.forward(self.input_buffer.buffer)
         logits = logits[..., -1:]
         sample = sampler(logits)
         return sample, logits
 
     def _update(self, x):
         x = encoding.one_hotf(x, self.Q)
-        self.input_wnd.add(x)
+        self.input_buffer.add(x)
+
+    def _setup(self, x: torch.Tensor):
+        B = x.shape[0]
+        self.input_buffer = RecentBuffer(
+            (B, self.Q, self.R), dtype=x.dtype, device=x.device
+        )
+        self._update(x)
 
 
 WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
@@ -95,11 +105,101 @@ def generate(
     sampler: "ObservationSampler",
 ) -> WaveGenerator:
     g = Generator(model, initial_obs[..., :-1])
-    x = initial_obs[..., -1:]
-    while True:
-        sample, logits = g.step(x, sampler)
-        yield sample, logits
-        x = sample
+    nextx = initial_obs[..., -1:]
+    with g:
+        while True:
+            sample, logits = g.step(nextx, sampler)
+            yield sample, logits
+            nextx = sample
+
+
+class FastGenerator:
+    def __init__(
+        self, model: "WaveNet", x: Union[torch.Tensor, list[torch.Tensor]]
+    ) -> None:
+        self.model = model
+        self.R = self.model.receptive_field
+        self.Q = self.model.quantization_levels
+        self.input_queues = None
+        self._hooks_enabled = False  # make thread local?
+        self._hook_handles = None
+        self._setup_queues(x)
+
+    def __enter__(self):
+        self._setup_hooks()
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        self._remove_hooks()
+
+    def step(
+        self, x: torch.Tensor, sampler: sampling.ObservationSampler
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        assert self.input_queues, "enter context first"
+        self._hooks_enabled = True  # TODO: context this
+        logits, _ = self.model.forward(x, causal_pad=False)
+        logits = logits[..., -1:]
+        sample = sampler(logits)
+        self._hooks_enabled = False
+        return sample, logits
+
+    def _setup_queues(self, x: Union[torch.Tensor, list[torch.Tensor]]):
+        is_raw_input = isinstance(x, torch.Tensor)
+
+        if is_raw_input:
+            self.input_queues = self._make_queues(x.shape[0], x.dtype, x.device)
+            if x.shape[-1] > 0:
+                start = max(0, x.shape[-1] - self.R)
+                _, layer_inputs, _, _ = self.model.encode(x[..., start:])
+                self._update_queues(layer_inputs)
+        else:
+            self.input_queues = self._make_queues(
+                x[0].shape[0], x[0].dtype, x[0].device
+            )
+            self._update_queues(x)
+
+    def _update_queues(self, layer_inputs: list[torch.Tensor]):
+        for linp, q in zip(layer_inputs, self.input_queues):
+            q.add(linp)
+
+    def _setup_hooks(self):
+        def prepare_input_pre_hook(module, input, q: RecentBuffer):
+            del module
+            if self._hooks_enabled:
+                input = list(input)
+                x = input[0]
+                y = torch.cat((q.buffer, x), -1)
+                # print(q.buffer.shape, x.shape, y.shape)
+                q.add(x)
+                input[0] = y
+                input = tuple(input)
+            return input
+
+        hooks = [
+            layer.register_forward_pre_hook(partial(prepare_input_pre_hook, q=q))
+            for layer, q in zip(self.model.layers, self.input_queues)
+        ]
+        self._hook_handles = hooks
+
+    def _remove_hooks(self):
+        if self._hook_handles is not None:
+            for h in self._hook_handles:
+                h.remove()
+
+    def _make_queues(
+        self, batch_size: int, dtype: torch.dtype, device: torch.device
+    ) -> List[RecentBuffer]:
+        queues = []
+        for layer in self.model.layers:
+            layer: "WaveLayerBase"
+            q = RecentBuffer(
+                (batch_size, layer.in_channels, layer.causal_left_pad),
+                dtype=dtype,
+                device=device,
+                empty=False,
+            )  # Populated with zeros will act like causal padding
+            queues.append(q)
+        return queues
 
 
 def generate_fast(

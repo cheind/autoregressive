@@ -103,6 +103,36 @@ def test_generators():
 
 
 @torch.no_grad()
+def test_fast_generators():
+    # Pretty useless to use quantization level of 1, but we use floats in the tests.
+    net = wave.WaveNet(
+        quantization_levels=1,
+        wave_channels=8,
+        input_kernel_size=3,
+        wave_dilations=[1, 2, 4],
+    )
+    R = net.receptive_field
+    assert R == 10
+    x = torch.rand(1, 1, 16)
+    y, _ = net(x)
+    assert y.shape == (1, 1, 16)
+
+    # Next, we compare the initial generator prediction to net output y. This can be
+    # done as generators produce as first prediction the net result of first observation. # noqa:E501
+    for i in range(1, 16):
+        gslow = generators.generate(net, x[..., : (i + 1)], sampler=identity_sampler)
+        yslow_samples, yslow_logits = generators.slice_generator(gslow, 1)  # predict 1
+        with generators.FastGenerator(net, x[..., :i]) as gen:
+            yfast_samples, yfast_logits = gen.step(
+                x[..., i : i + 1], sampler=identity_sampler
+            )
+        # assert torch.allclose(yslow_samples.squeeze(), y[..., i].squeeze(), atol=1e-4)
+        # assert torch.allclose(yslow_outputs.squeeze(), y[..., i].squeeze(), atol=1e-4)
+        # assert torch.allclose(yfast_samples.squeeze(), y[..., i].squeeze(), atol=1e-4)
+        # assert torch.allclose(yfast_outputs.squeeze(), y[..., i].squeeze(), atol=1e-4)
+
+
+@torch.no_grad()
 def test_compressed_generators():
     # Pretty useless to use quantization level of 1, but we use floats in the tests.
     net = wave.WaveNet(

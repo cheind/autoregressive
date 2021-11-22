@@ -6,6 +6,7 @@ __all__ = [
 
 from collections.abc import Sequence
 from typing import Any, Callable, Dict, Tuple, Union
+from functools import partial
 import dataclasses
 
 import torch
@@ -124,10 +125,14 @@ class FSeriesDataset(sd.SeriesDataset):
         }
 
 
-def add_period_conditioning(sm: sd.SeriesMeta, max_period: int = 5) -> sd.SeriesMeta:
+def add_period_conditioning(
+    sm: sd.SeriesMeta, period_range: tuple[float, float]
+) -> sd.SeriesMeta:
     series, meta = sm
     p = torch.round(meta["period"].float()).long()
-    p = F.one_hot(p, num_classes=max_period + 1).permute(1, 0)
+    lower = int(period_range[0])
+    num_periods = int(period_range[1]) - lower
+    p = F.one_hot(p - lower, num_classes=num_periods + 1).permute(1, 0)
     series["c"] = p.float()
     return series, meta
 
@@ -157,7 +162,12 @@ class FSeriesDataModule(pl.LightningDataModule):
             signal_high=signal_range[1],
         )
         if period_conditioning:
-            transform = chain_transforms(transform, add_period_conditioning)
+            transform = chain_transforms(
+                transform,
+                partial(
+                    add_period_conditioning, period_range=train_params.period_range
+                ),
+            )
         self.train_ds = FSeriesDataset(train_params, transform=transform)
         self.val_ds = FSeriesDataset(val_params, transform=transform)
         self.quantization_levels = quantization_levels

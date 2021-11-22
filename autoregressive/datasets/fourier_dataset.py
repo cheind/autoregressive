@@ -135,8 +135,8 @@ def add_period_conditioning(
     series, meta = sm
     p = torch.round(meta["period"].float()).long()
     lower = int(period_range[0])
-    num_periods = int(period_range[1]) - lower
-    p = F.one_hot(p - lower, num_classes=num_periods + 1).permute(1, 0)
+    num_periods = int(period_range[1]) - lower  # upper is exclusive
+    p = F.one_hot(p - lower, num_classes=num_periods).permute(1, 0)
     series["c"] = p.float()
     return series, meta
 
@@ -167,9 +167,7 @@ class FSeriesDataModule(pl.LightningDataModule):
         )
         if period_conditioning:
             cr = int(train_params.period_range[1] - train_params.period_range[0])
-            _logger.info(
-                f"Added period conditioning: {cr+1} condition channels required"
-            )
+            _logger.info(f"Added period conditioning: {cr} condition channels required")
             transform = chain_transforms(
                 transform,
                 partial(

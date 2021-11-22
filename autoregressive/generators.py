@@ -9,6 +9,7 @@ __all__ = [
 ]
 import itertools
 import warnings
+from contextlib import contextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Iterator, List, Tuple, Union
 
@@ -19,6 +20,8 @@ from . import encoding, sampling
 if TYPE_CHECKING:
     from .sampling import ObservationSampler
     from .wave import WaveLayerBase, WaveNet
+
+WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
 
 
 class RecentBuffer:
@@ -89,25 +92,8 @@ class Generator:
         )
 
 
-WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
-
-
-def generate(
-    model: "WaveNet",
-    initial_obs: torch.Tensor,
-    sampler: "ObservationSampler",
-) -> WaveGenerator:
-    g = Generator(model, initial_obs.shape[0], initial_obs.device)
-    g.push(initial_obs[..., :-1])
-    nextx = initial_obs[..., -1:]
-    with g:
-        while True:
-            sample, logits = g.step(nextx, sampler)
-            yield sample, logits
-            nextx = sample
-
-
 class FastGenerator:
+    # note, not thread-safe. modifies global state of model using hooks.
     def __init__(self, model: "WaveNet", batch_size: int, device: torch.device) -> None:
         self.model = model
         self.R = self.model.receptive_field
@@ -127,12 +113,11 @@ class FastGenerator:
     def step(
         self, x: torch.Tensor, sampler: sampling.ObservationSampler
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        assert self.input_queues, "enter context first"
-        self._hooks_enabled = True  # TODO: context this
-        logits, _ = self.model.forward(x, causal_pad=False)
+        assert self._hook_handles, "enter generator context first"
+        with self._enable_hooks():
+            logits, _ = self.model.forward(x, causal_pad=False)
         logits = logits[..., -1:]
         sample = sampler(logits)
-        self._hooks_enabled = False
         return sample, logits
 
     def push(self, x: Union[torch.Tensor, list[torch.Tensor]]):
@@ -185,6 +170,30 @@ class FastGenerator:
         if self._hook_handles is not None:
             for h in self._hook_handles:
                 h.remove()
+        self._hook_handles = None
+
+    @contextmanager
+    def _enable_hooks(self):
+        try:
+            self._hooks_enabled = True
+            yield
+        finally:
+            self._hooks_enabled = False
+
+
+def generate(
+    model: "WaveNet",
+    initial_obs: torch.Tensor,
+    sampler: "ObservationSampler",
+) -> WaveGenerator:
+    g = Generator(model, initial_obs.shape[0], initial_obs.device)
+    g.push(initial_obs[..., :-1])
+    nextx = initial_obs[..., -1:]
+    with g:
+        while True:
+            sample, logits = g.step(nextx, sampler)
+            yield sample, logits
+            nextx = sample
 
 
 def generate_fast(

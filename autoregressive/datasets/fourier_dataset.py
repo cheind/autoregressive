@@ -35,7 +35,7 @@ class FSeriesParams:
     dt: float = 0.02
     fterm_range: IntOrIntRange = (3, 5)
     tstart_range: FloatOrFloatRange = 0.0
-    period_range: FloatOrFloatRange = 10.0
+    period_range: IntOrIntRange = 10.0
     bias_range: FloatOrFloatRange = 0.0
     coeff_range: FloatOrFloatRange = (-1.0, 1.0)
     phase_range: FloatOrFloatRange = (-PI, PI)
@@ -136,6 +136,7 @@ def add_period_conditioning(
     p = torch.round(meta["period"].float()).long()
     lower = int(period_range[0])
     num_periods = int(period_range[1]) - lower  # upper is exclusive
+    # print(p, period_range, num_periods, lower, int(period_range[1]))
     p = F.one_hot(p - lower, num_classes=num_periods).permute(1, 0)
     series["c"] = p.float()
     return series, meta

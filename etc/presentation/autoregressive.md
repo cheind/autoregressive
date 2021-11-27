@@ -9,7 +9,7 @@ math: katex
 ---
 <!-- 
 _class: lead
-_footer: 'https://github.com/cheind/autoregressive'
+_footer: '*https://arxiv.org/abs/1609.03499'
 _paginate: false
  -->
 <style>
@@ -22,9 +22,12 @@ img[alt~="center"] {
 }
 </style>
 <style scoped>section { font-size: 30px; }</style>
+
 # Autoregressive Models
+The *WaveNet** Architecture
 **Christoph Heindl**
 12/2021
+![center fit](wave.png)
 
 ---
 

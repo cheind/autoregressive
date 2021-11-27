@@ -76,12 +76,14 @@ then a generative model estimates
 $$
 p(\mathbf{X}).
 $$
-Given the joint distribution, we might generate *new* data via sampling 
+This is in contrast discriminative models, which model conditional distributions, e.g. $p(X_3 \mid X_2,X_1)$. 
+
+Given the joint distribution, we can generate *new* data via sampling 
 $$
 \mathbf{x} \sim p(\mathbf{X}).
 $$
 
-Note, this is in contrast discriminative models, which model only conditional distributions, e.g. $p(X_3|X_2,X_1)$.
+
 
 ---
 
@@ -102,7 +104,7 @@ When thinking about random time series, the first break-down leads to...
 
 # Autoregressive Models
 
-Given a set of random variables $\mathbf{X}=\{X_1,X_2,X_3...,X_T\}$, we represent their joint distribution as
+Given a set of time dependent random variables $\mathbf{X}=\{X_1,X_2,X_3...,X_T\}$, we represent their joint distribution as
 $$
 \begin{align*}
 p(\mathbf{X}) &= \prod_{i=1}^Tp(X_i\mid \mathbf{X}_{j<i})\\

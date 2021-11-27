@@ -52,7 +52,7 @@ Led to the **most natural-sounding** speech/audio at the time
 # Content
 
 This talk covers
- - an introduction to autoregressive models and limitations,
+ - an introduction to autoregressive models and their limitations,
  - the architectural ideas to overcome those limitations, and
  - few of existing improvements.
 

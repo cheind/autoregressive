@@ -9,7 +9,6 @@ math: katex
 ---
 <!-- 
 _class: lead
-_footer: '*https://arxiv.org/abs/1609.03499'
 _paginate: false
  -->
 <style>
@@ -30,17 +29,88 @@ The *WaveNet** Architecture
 ![center fit](wave.png)
 
 ---
+<!-- 
+_footer: '*https://arxiv.org/abs/1609.03499'
+_paginate: true
+ -->
+# WaveNet*
 
-# Autoregressive
+## Paper
+Wavenet: A generative model for raw audio.
+Oord, Aaron van den, et al.
+[@deepmind](https://deepmind.com/blog/article/wavenet-generative-model-raw-audio), 2016
 
-Given a set of random variables $\mathbf{x}=\{x_1,x_2,x_3...,x_T\}$, we represent their joint distribution as
+## Contributions
+- Models the wave-form directly (16kHz)
+- Generates one time sample at a time
+- Capable of capturing important audio structure at many time-scales
+
+Led to the **most natural-sounding** speech/audio at the time
+
+---
+
+# Content
+
+This talk covers
+ - an introduction to autoregressive models and limitations,
+ - the architectural ideas to overcome those limitations, and
+ - few of existing improvements.
+
+This talk is not
+ - about audio/speech (we use Fourier series instead),
+ - a comprehensive state-of-the-art presentation on generative models.
+
+---
+
+# Background
+
+--- 
+
+# Generative Models
+
+Generative models build a distribution over the data itself. Consider a set of random variables 
+$$
+\mathbf{X}=\{X_1,X_2,X_3\},
+$$
+then a generative model estimates 
+$$
+p(\mathbf{X}).
+$$
+Given the joint distribution, we might generate *new* data via sampling 
+$$
+\mathbf{x} \sim p(\mathbf{X}).
+$$
+
+Note, this is in contrast discriminative models, which model only conditional distributions, e.g. $p(X_3|X_2,X_1)$.
+
+---
+
+# Chain Rule of Probability
+
+Allows us to break down $p(\mathbf{X})$ into a product of single-variable conditional distributions. 
 $$
 \begin{align*}
-p(\mathbf{x}) &= \prod_{i=1}^Tp(x_i\mid \mathbf{x}_{j<i})\\
-&=p(x_1)p(x_2 \mid x_1)p(x_3 \mid x_2, x_1)\ldots,
+p(\mathbf{x}) &= p(X_3 \mid X_2,X_1)p(X_2 \mid X_1)p(X_1)\\
+&=p(X_1 \mid X_2,X_3)p(X_3 \mid X_2)p(X_2)\\
+&\ldots
 \end{align*}
 $$
-which is always possible (chain rule).
+
+When thinking about random time series, the first break-down leads to...
+
+---
+
+# Autoregressive Models
+
+Given a set of random variables $\mathbf{X}=\{X_1,X_2,X_3...,X_T\}$, we represent their joint distribution as
+$$
+\begin{align*}
+p(\mathbf{X}) &= \prod_{i=1}^Tp(X_i\mid \mathbf{X}_{j<i})\\
+&=p(X_1)p(X_2 \mid X_1)p(X_3 \mid X_2, X_1)\ldots.
+\end{align*}
+$$
+
+This induces a form of **causality**, as the distribution over a future variable depends on all previous observations.
 
 ---
 

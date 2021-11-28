@@ -45,7 +45,7 @@ Oord, Aaron van den, et al.
 - Generates one time sample at a time
 - Capable of capturing important audio structure at many time-scales
 
-Led to the **most natural-sounding** speech/audio at the time
+Led to the **most natural-sounding** speech/audio at the time.
 
 ---
 
@@ -119,7 +119,6 @@ $$
 This induces a form of **causality**, as the distribution over a future variable depends on all previous observations.
 
 ---
-
 # Lagged Autoregressive Models
 
 For computational reasons, one usually limits the number of past observations influencing future predictions.
@@ -132,6 +131,33 @@ $$
 where $\mathbf{\theta}=\{\theta_0,...,\theta_R\}$ are the parameters of the model and $\epsilon_t$ is (white) noise.
 
 ---
+# Translation to Neural Networks
+The definition of autogressive models can be captured by a sinlge fully connected neural layer
+$$
+\begin{align*}
+X_t &= \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t \\
+&= \mathbf{\theta}^T\mathbf{h}_t+ \epsilon_t,
+\end{align*}
+$$
+where $\mathbf{\theta} = \begin{pmatrix} \theta_0 & \theta_1 &\ldots & \theta_R \end{pmatrix}$ are the weights including the bias, and $\mathbf{h}_t = \begin{pmatrix} 1 & X_{t-1} & \ldots & X_{t-R} \end{pmatrix}$. 
+
+For more model capacity, one might stack layers with multiple features, in which case we get
+$$
+\begin{equation*}
+\mathbf{x}^l_t = \mathbf{\Theta}^l\mathbf{H}_t^{l-1} + \epsilon_t.
+\end{equation*}
+$$
+
+---
+
+# Limitations
+- The number of weights grows linearily with the receptive field of the model.
+For multi-time scale models (speech,audio) this becomes quickly an issue.
+- Training with linear layers is inefficient as autoregressive value needs 
+to be computed for every possible window of size $R$.
+
+---
+
 
 # Dilated Convolutions
 <!--_footer: Note, how each input (orange) within the receptive field is used exactly once.-->

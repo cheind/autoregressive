@@ -104,6 +104,10 @@ When thinking about random time series, the first break-down leads to...
 
 # Autoregressive Models
 
+---
+
+# Autoregressive Models
+
 Given a set of time dependent random variables $\mathbf{X}=\{X_1,X_2,X_3...,X_T\}$, we represent their joint distribution as
 $$
 \begin{align*}
@@ -113,6 +117,19 @@ p(\mathbf{X}) &= \prod_{i=1}^Tp(X_i\mid \mathbf{X}_{j<i})\\
 $$
 
 This induces a form of **causality**, as the distribution over a future variable depends on all previous observations.
+
+---
+
+# Lagged Autoregressive Models
+
+For computational reasons, one usually limits the number of past observations influencing future predictions.
+An autoregressive model of order/lag $R$ is defined as
+$$
+\begin{equation*}
+X_t = \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t,
+\end{equation*}
+$$
+where $\mathbf{\theta}=\{\theta_0,...,\theta_R\}$ are the parameters of the model and $\epsilon_t$ is (white) noise.
 
 ---
 

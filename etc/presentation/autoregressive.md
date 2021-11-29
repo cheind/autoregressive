@@ -76,14 +76,11 @@ then a generative model estimates
 $$
 p(\mathbf{X}).
 $$
-This is in contrast discriminative models, which model conditional distributions, e.g. $p(X_3 \mid X_2,X_1)$. 
-
 Given the joint distribution, we can generate *new* data via sampling 
 $$
 \mathbf{x} \sim p(\mathbf{X}).
 $$
-
-
+In contrast, a discriminative models models conditional distributions, e.g. $p(X_3 \mid X_2,X_1)$.
 
 ---
 
@@ -116,7 +113,7 @@ p(\mathbf{X}) &= \prod_{i=1}^Tp(X_i\mid \mathbf{X}_{j<i})\\
 \end{align*}
 $$
 
-This induces a form of **causality**, as the distribution over a future variable depends on all previous observations.
+This induces a form of **causality**, as the distribution over a future variable depends on all previous observations. It also allows us to generate *new* data one sample point at a time (conditioned on all the previous ones).
 
 ---
 # Lagged Autoregressive Models
@@ -132,7 +129,7 @@ where $\mathbf{\theta}=\{\theta_0,...,\theta_R\}$ are the parameters of the mode
 
 ---
 # Translation to Neural Networks
-The definition of autogressive models can be captured by a sinlge fully connected neural layer
+The definition of autogressive models can be captured by a single fully connected neural layer
 $$
 \begin{align*}
 X_t &= \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t \\
@@ -141,19 +138,21 @@ X_t &= \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t \\
 $$
 where $\mathbf{\theta} = \begin{pmatrix} \theta_0 & \theta_1 &\ldots & \theta_R \end{pmatrix}$ are the weights including the bias, and $\mathbf{h}_t = \begin{pmatrix} 1 & X_{t-1} & \ldots & X_{t-R} \end{pmatrix}$. 
 
-For more model capacity, one might stack layers with multiple features, in which case we get
+## Deep models
+
+For more model capacity, one might stack layers having multiple features, in which case we get something along the following line
 $$
 \begin{equation*}
-\mathbf{x}^l_t = \mathbf{\Theta}^l\mathbf{H}_t^{l-1} + \epsilon_t.
+\mathbf{x}^l_t = \mathbf{\Theta}^l\mathbf{H}_t^{l-1} + \mathbf{\Epsilon}^l_t.
 \end{equation*}
 $$
 
 ---
 
 # Limitations
-- The number of weights grows linearily with the receptive field of the model.
-For multi-time scale models (speech,audio) this becomes quickly an issue.
-- Training with linear layers is inefficient as autoregressive value needs 
+- The **number of weights** grows linearily with the receptive field of the model.
+For multi-time scale models (speech, audio) this becomes quickly an issue.
+- **Training** with linear layers is inefficient as autoregressive value needs 
 to be computed for every possible window of size $R$.
 
 ---

@@ -200,7 +200,7 @@ N-step forecast comparison between two models trained with and without unrolling
 
 ![bg fit right:50%](compare_curves_noise.svg)
 
-# Train-Unrolling Results
+# Noisy Train-Unrolling Results
 
 N-step prediction based on noisy observations - comparison between two models trained with and without unrolling on a clean Fourier series dataset with up to 4 terms.
 
@@ -212,7 +212,7 @@ N-step prediction based on noisy observations - comparison between two models tr
 
 ![bg fit right:45%](compare_val_acc.svg)
 
-# Train-Unrolling Results
+# Train-Unrolling Validation Acc. Results
 
 8-step rolling origin validation comparison between models trained with and without unrolling on Fourier-series dataset with up to 4 terms.
 

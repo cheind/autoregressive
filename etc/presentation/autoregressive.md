@@ -291,9 +291,21 @@ x_t \sim g(Gumbel(0,1),\pi_1, \ldots ,\pi_C,\tau),
 $$
 such that $\frac{\partial{g}}{\partial \pi_i}$ exists.
 <!--_footer: 'Categorical Reparameterization with Gumbel-Softmax, Eric Jang et al., 2017</br> The Concrete Distribution: A Continuous Relaxation of Discrete Random Variables, C. Maddison et al., 2017 - '-->
+
+---
+# Experiments
+---
+
+# Setup
+
+Instead of audio waveforms as input, using a Fourier dataset with randomized coefficients, number of terms and periodicity.
+
+![fit center](fourier_samples.svg)
+
 ---
 
 ![bg fit right:50%](compare_curves_train_unroll.svg)
+---
 
 # Train-Unrolling Results
 
@@ -333,9 +345,17 @@ N-step prediction based on noisy observations - comparison between two models tr
 
 # Generative Results
 
-The following graph shows four samples drawn from the models' prior distribution.
+The following graph shows four samples drawn from the models' prior distribution (periodicity fixed in training).
 
 ![center w:1024](prior_samples.svg)
+
+---
+
+# Conditional Generative Results
+
+The following graph shows four samples drawn from the models' prior distribution (periodicity fixed in training).
+
+TODO
 
 ---
 

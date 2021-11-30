@@ -358,7 +358,6 @@ The following graphs depict samples using different periodicity conditions: Larg
 ![center fit h:256](wavenet-generate-condition15.svg)
 ![center fit h:256](wavenet-generate-condition1.svg)
 
-
 ---
 
 ![bg fit right:50%](benchmark_generators.svg)

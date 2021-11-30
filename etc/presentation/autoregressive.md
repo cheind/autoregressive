@@ -284,22 +284,26 @@ How to backprop through a random sample from a categorical distribution?
 
 <!--_footer: '*TBD, Christoph Heindl, 2021 (unpublished)'-->
 ---
-# Train Unrolling
+# Fully Differentiable Train Unrolling
 
 ## Reparametrization Idea
-Note if $x_t \sim \mathcal{N}(\mu,\sigma)$, which we can express as $x_t \sim \mathcal{N}(0,1)\sigma + \mu$. 
+Note if $X_t \sim \mathcal{N}(\mu,\sigma)$, which we can express as $X_t \sim \mathcal{N}(0,1)\sigma + \mu$. 
 
 Now $\frac{\partial}{\partial \mu}$, $\frac{\partial}{\partial \sigma}$ exist and randomness becomes an input (for which we do not require gradients).
 
 ## Reparametrization of Categorical Distributions
 
-Similar reparametrization exists for $x_t \sim \mathcal{Cat}(\pi_1,\ldots,\pi_C)$
-using Gumbel distribution*, which allows us to write 
+Similar reparametrization exists for $X_t \sim \mathcal{Cat}(\pi_1,\ldots,\pi_C)$ using Gumbel distribution*, which allows us to write 
 $$
-x_t \sim g(Gumbel(0,1),\pi_1, \ldots ,\pi_C,\tau),
+X_t \sim g(Gumbel(0,1),\pi_1, \ldots ,\pi_C,\tau),
 $$
-such that $\frac{\partial{g}}{\partial \pi_i}$ exists.
+such that $\frac{\partial{g}}{\partial \pi_i}$ exists. Here $\tau$ is a temperature scaling parameter.
 <!--_footer: 'Categorical Reparameterization with Gumbel-Softmax, Eric Jang et al., 2017</br> The Concrete Distribution: A Continuous Relaxation of Discrete Random Variables, C. Maddison et al., 2017 - '-->
+
+---
+# Fully Differentiable Train Unrolling
+
+![center](wavenet-unroll-fwd-bwd.svg)
 
 ---
 # Experiments

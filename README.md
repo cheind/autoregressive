@@ -9,11 +9,11 @@ For presentation purposes, the WaveNet-like models are applied to randomized Fou
 
 ## Features
 Currently the following features are implemented
- - WaveNet architecture and training as proposed in (oord2016wavenet).
- - Fast generation based on (paine2016fast).
- - A novel idea on n-step train-unrolling using Gumbel-softmax.
- - A randomized Fourier dataset.
-
+ - WaveNet architecture and training as proposed in (*oord2016wavenet*)
+ - Conditioning support (*oord2016wavenet*)
+ - Fast generation based on (*paine2016fast*)
+ - Fully differentiable n-step unrolling in training (*heindl2021autoreg*)
+ - A randomized Fourier dataset
 
 ## Presentation
 Click the image below to access my presentation.

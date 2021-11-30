@@ -75,16 +75,17 @@ model:
   - 16
   - 32
   - 64
+  - 128
   wave_kernel_size: 2
   wave_channels: 32
-  cond_channels: 21
-  input_kernel_size: 7
+  cond_channels: 15
+  input_kernel_size: 5
   train_opts:
     skip_partial: false
-    lr: 0.01
+    lr: 0.001
     sched_patience: 50
-    train_ro_horizon: 8
-    train_ro_num_origins: 16
+    train_ro_horizon: 1
+    train_ro_num_origins: null
     val_ro_horizon: 8
     val_ro_num_origins: 8
 data:
@@ -98,22 +99,20 @@ data:
       num_curves: 8192
       num_tsamples: 2048
       dt: 0.02
-      fterm_range:
-      - 3
-      - 3
+      fterm_range: 3
       tstart_range: 0.0
       period_range:
-      - 3.0
-      - 20.0
+        - 5
+        - 20
       bias_range: 0.0
-      coeff_range:
-      - -1.0
-      - 1.0
-      phase_range:
-      - -3.141592653589793
-      - 3.141592653589793
+      coeff_range: 
+        - -1.0
+        - 1.0
+      phase_range: 
+        - -3.14
+        - 3.14
       lineartrend_range: 0.0
       smoothness: 0.75
-      seed: null
+      seed: 123
       noise_scale: 0.0
     val_params: null

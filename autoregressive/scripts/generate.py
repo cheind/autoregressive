@@ -3,6 +3,7 @@ import time
 
 import matplotlib.pyplot as plt
 import torch
+import torch.nn.functional as F
 import torch.utils.data
 import pytorch_lightning as pl
 
@@ -15,7 +16,7 @@ class GenerateLightningCLI(InstantiateOnlyLightningCLI):
     def add_arguments_to_parser(self, parser) -> None:
         parser.add_argument("-horizon", type=int, default=None)
         parser.add_argument("-num-curves", type=int, default=4)
-        parser.add_argument("-condition", type=str, default=None)
+        parser.add_argument("-condition", type=int, default=None)
         parser.add_argument(
             "--fast-wavenet", action=argparse.BooleanOptionalAction, default=True
         )
@@ -26,13 +27,18 @@ class GenerateLightningCLI(InstantiateOnlyLightningCLI):
         return super().add_arguments_to_parser(parser)
 
 
-def get_condition(cli):
+def get_condition(cli, model: wave.WaveNet):
     cfg = cli.config
     if cfg["condition"] is None:
         return None
     else:
-        c = list(map(lambda c: 1 if c == "1" else 0, cfg["condition"]))
-        return torch.tensor(c).view(1, -1, 1).float()
+        return (
+            F.one_hot(
+                torch.tensor(cfg["condition"]), num_classes=model.conditioning_channels
+            )
+            .view(1, -1, 1)
+            .float()
+        )
 
 
 @torch.no_grad()
@@ -47,18 +53,19 @@ def main():
     cfg = cli.config
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = load_model(cli).to(dev)
+    dm = cli.datamodule
     seeds = torch.randint(0, model.quantization_levels, size=(cfg["num_curves"], 1))
     if cfg["seed_center"]:
         seeds.fill_(model.quantization_levels // 2)
     seeds = seeds.to(dev)
 
     horizon = cfg["horizon"] or model.receptive_field * 2
-    t = torch.arange(0, horizon + 1, 1)
+    t = torch.arange(0, horizon + 1, 1) * dm.train_params.dt
 
-    global_cond = get_condition(cli)
+    global_cond = get_condition(cli, model)
     if global_cond is not None:
         global_cond = global_cond.to(dev)
-    print("condition is", global_cond)
+    print("using condition", global_cond.view(-1))
 
     # Generate. Note, we leave the last obs out so the first item predicted
     # overlaps the last observation and we hence get a smooth plot

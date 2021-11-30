@@ -213,18 +213,20 @@ def main():
     # dm = FSeriesDataModule(
     #     train_fseries_params=FSeriesParams(smoothness=0.75), batch_size=512
     # )
-    dm = FSeriesDataModule(quantization_levels=127)
+    train_params = FSeriesParams(smoothness=0.75, period_range=(5, 40))
+    dm = FSeriesDataModule(quantization_levels=127, train_params=train_params)
 
     fig = plt.figure(figsize=(8.0, 8.0))
     grid = ImageGrid(
-        fig, 111, nrows_ncols=(5, 1), axes_pad=0.05, share_all=True, aspect=False
+        fig, 111, nrows_ncols=(4, 3), axes_pad=0.05, share_all=True, aspect=False
     )
 
     for ax, (s, meta) in zip(grid, dm.train_ds):
         x = s["x"]
         dt = meta["dt"]
-        ax.step(torch.arange(0, len(x), 1) * dt, x, label="continous", c="k")
+        ax.step(torch.arange(0, len(x), 1) * dt, x, c="k", linewidth=0.5)
         ax.set_ylim(0, meta["encoding.quantization_levels"])
+    fig.savefig("tmp/fourier_dataset.svg", bbox_inches="tight")
     plt.show()
 
 

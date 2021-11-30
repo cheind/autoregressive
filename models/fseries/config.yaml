@@ -100,7 +100,7 @@ data:
       - 3
       - 3
       tstart_range: 0.0
-      period_range: 5.0
+      period_range: 5
       bias_range: 0.0
       coeff_range:
       - -1.0

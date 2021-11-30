@@ -221,6 +221,14 @@ WaveNet combines stacked dilated convolutions, causal padding and gated activati
 
 ![center h:400](wavenet-arch.png)
 
+---
+# Training
+
+Paper performs a one-step rolling origin training routine using cross entropy as loss function. 
+![center fit](wavenet-training.svg)
+Raw audio data is quantized to 256 bins and one-hot encoded ($X_t \sim Cat(\pi_1,\ldots,\pi_{256})$). 
+
+Side note: one-step loss does not account for generative n-step drift (which is probably ok for audio synthesis).
 
 ---
 # Data Generation

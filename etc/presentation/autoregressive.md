@@ -35,15 +35,15 @@ _paginate: true
  -->
 # WaveNet*
 
-## Paper
 Wavenet: A generative model for raw audio.
-Oord, Aaron van den, et al.
-[@deepmind](https://deepmind.com/blog/article/wavenet-generative-model-raw-audio), 2016
+Aaron van den Oord, et al.
+[@deepmind](https://deepmind.com/blog/article/wavenet-generative-model-raw-audio),  2016
 
 ## Contributions
 - Models the wave-form directly (16kHz)
 - Generates one time sample at a time
 - Capable of capturing important audio structure at many time-scales
+- Allows for conditional generation
 
 Led to the **most natural-sounding** speech/audio at the time.
 
@@ -57,8 +57,10 @@ This talk covers
  - few of existing improvements.
 
 This talk is not
- - about audio/speech (we use Fourier series instead),
+ - about audio/speech (we use time series instead),
  - a comprehensive state-of-the-art presentation on generative models.
+
+Accompanying code: https://github.com/cheind/autoregressive
 
 ---
 
@@ -86,17 +88,15 @@ In contrast, a discriminative models models conditional distributions, e.g. $p(X
 
 # Chain Rule of Probability
 
-Allows us to break down $p(\mathbf{X})$ into a product of single-variable conditional distributions. 
+Allows us to break down $p(\mathbf{X})$ into a product of single-variable conditional distributions
 $$
 \begin{align*}
-p(\mathbf{x}) &= p(X_3 \mid X_2,X_1)p(X_2 \mid X_1)p(X_1)\\
+p(\mathbf{X}) &= p(X_3 \mid X_2,X_1)p(X_2 \mid X_1)p(X_1)\\
 &=p(X_1 \mid X_2,X_3)p(X_3 \mid X_2)p(X_2)\\
 &\ldots
 \end{align*}
 $$
 
-When thinking about random time series, the first break-down leads to...
-
 ---
 
 # Autoregressive Models
@@ -105,7 +105,7 @@ When thinking about random time series, the first break-down leads to...
 
 # Autoregressive Models
 
-Given a set of time dependent random variables $\mathbf{X}=\{X_1,X_2,X_3...,X_T\}$, we represent their joint distribution as
+Given a set of (time-)ordered random variables $\mathbf{X}=\{X_1,X_2,X_3...,X_T\}$, we represent their joint distribution as
 $$
 \begin{align*}
 p(\mathbf{X}) &= \prod_{i=1}^Tp(X_i\mid \mathbf{X}_{j<i})\\
@@ -122,7 +122,7 @@ For computational reasons, one usually limits the number of past observations in
 An autoregressive model of order/lag $R$ is defined as
 $$
 \begin{equation*}
-X_t = \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t,
+X_t\,|\,\mathbf{X}_{j<t} = \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t,
 \end{equation*}
 $$
 where $\mathbf{\theta}=\{\theta_0,...,\theta_R\}$ are the parameters of the model and $\epsilon_t$ is (white) noise.
@@ -132,7 +132,7 @@ where $\mathbf{\theta}=\{\theta_0,...,\theta_R\}$ are the parameters of the mode
 The definition of autogressive models can be captured by a single fully connected neural layer
 $$
 \begin{align*}
-X_t &= \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t \\
+X_t\,|\,\mathbf{X}_{j<t} &= \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t \\
 &= \mathbf{\theta}^T\mathbf{h}_t+ \epsilon_t,
 \end{align*}
 $$
@@ -143,24 +143,41 @@ where $\mathbf{\theta} = \begin{pmatrix} \theta_0 & \theta_1 &\ldots & \theta_R 
 For more model capacity, one might stack layers having multiple features, in which case we get something along the following line
 $$
 \begin{equation*}
-\mathbf{x}^l_t = \mathbf{\Theta}^l\mathbf{H}_t^{l-1} + \mathbf{\Epsilon}^l_t.
+\mathbf{H}^l_t = \sigma\left(\mathbf{\Theta}^l\mathbf{H}_t^{l-1} + \mathbf{\Epsilon}^l_t\right),
 \end{equation*}
 $$
+where $\sigma$ is a non-linearity and subscript $l$ denotes the $l$-th layer.
 
 ---
 
 # Limitations
-- The **number of weights** grows linearily with the receptive field of the model.
-For multi-time scale models (speech, audio) this becomes quickly an issue.
-- **Training** with linear layers is inefficient as autoregressive value needs 
+
+1. **Training** with linear layers is **inefficient** as autoregressive value needs 
 to be computed for every possible window of size $R$.
+1. The **number of weights** grows linearily with the receptive field of the model.
+For multi-time scale models (speech, audio) this becomes quickly an issue.
+
 
 ---
 
+# WaveNet
 
-# Dilated Convolutions
+---
+
+# Convolutions: Improving Training Efficiency
+
+Interpret $X_t\,|\,\mathbf{X}_{j<t}$ in terms of convolution. Allows for a fully-convolutional computation of all $X_t$ in one sweep. Below illustration is for a model of $R=3$.
+![center](fc_vs_conv.svg)
+## Need to be careful about (see Causal Padding slides)
+ - Ensure no data leakage happens (i.e input restricted to $\mathbf{x}_{j<t}$)
+ - How to handle variables $X_{t}$, where $t<R$
+
+---
+
+# Dilated Convolutions: Exponential Receptive Fields 
+
 <!--_footer: Note, how each input (orange) within the receptive field is used exactly once.-->
-Receptive field of dilated convolutions grows exponentially while parameters increase only linearly.
+Receptive field of dilated convolutions grows exponentially while parameters increase only linearly. Figure below uses kernel size $K_i=2$.
 
 ![center](wavenet-dilated-convolutions.svg)
 
@@ -168,20 +185,112 @@ In general, each layer with dilation factor $D_i$ and kernel size $K_i$ adds
 $$
  r_i = (K_i-1)D_i
 $$
-to the receptive field $R=\sum_i r_i$.
+to the receptive field $R=\sum_i r_i + 1$.
+
+---
+
+# Dilated Convolutions: Number of parameters
+
+Assume kernel size $K_i=2$ and a receptive field of $R=512$. Then a vanilla convolution requires
+$$
+R_{\textrm{vanilla}} = 512\;\text{parameters}
+$$
+(without a bias), while a stacked dilated convolution requires
+$$
+R_{\textrm{dilated}} = 2*9=18\;\text{parameters}.
+$$
+
+**Note**: stacked dilated convolutions make use of all 512 inputs.
 
 ---
 
 # Causal Padding
 
-
-Causal padding (left-padding) ensures that convoluted features do not depend on future values. Two possibilities: input-padding (left), layer-padding (right)
+Causal padding (left-padding) ensures that convoluted features do not depend on future values and allows us to compute predictions for $X_{t}$, where $t<R$ . Two possibilities: input-padding (left), layer-padding (right)
 
 ![](wavenet-causal-padding.svg) ![](wavenet-causal-padding2.svg)
 
-In general, a total $P=R-1$ paddings is required.
+In general, a total of $P=R-1$ padding values are required.
 
 <!--_footer: Autoregressive library uses layer-padding, WaveNet paper suggest input padding.-->
+---
+# Full Architecture
+
+WaveNet combines stacked dilated convolutions, causal padding and gated activation functions to predict a categorical distribution for $X_t|\mathbf{X}_{j<t}$ in parallel.
+
+![center h:400](wavenet-arch.png)
+
+
+---
+# Data Generation
+
+New data is generated one sample at a time. The figure below shows two steps for a model with $R=3$
+
+![center h:300](wavenet-generative.svg)
+
+Remarks:
+- Generation is inefficient - requires $R$ inputs but uses only the last output.
+- Generation involves sampling from the distribution.
+
+---
+
+# Extensions
+
+---
+# Conditional WaveNets*
+Condition the model on additional external input
+$$
+\begin{align*}
+p(\mathbf{X}\mid \mathbf{y}) &= \prod_{i=1}^Tp(X_i\mid \mathbf{X}_{j<i}, \mathbf{y})\\
+&=p(X_1 \mid \mathbf{y})p(X_2 \mid X_1, \mathbf{y})p(X_3 \mid X_2, X_1, \mathbf{y})\ldots.
+\end{align*}
+$$
+to change generative behavior. For example $\mathbf{y}$ might represent speaker identity in which case the model would generate data wrt. the given speaker.
+
+<!--_footer: '*Wavenet: A generative model for raw audio, Aaron van den Oord, et al., 2016 '-->
+---
+
+# Faster Generation*
+Relies on sparsity of access during computation. Introduce *queues* (i.e rolling buffers of size $r_i+1$) to store intermediate outputs. During generation only use oldest in queue and update queue.
+
+![center](wavenet-fast.svg)
+
+Similar to updates in recurrent neural nets.
+
+<!--_footer: '*Fast WaveNet Generation Algorithm, Tom le Paine et al., 2016 '-->
+
+---
+# Train Unrolling*
+
+In training, WaveNet uses a one-step rolling-origin loss which can causes substantial drift. 
+
+## Idea
+
+A n-step loss would allow the model to correct its own drift. 
+I.e we want to apply n-step generation and backprop through all samples. 
+
+## Issue
+How to backprop through a random sample from a categorical distribution?
+
+
+<!--_footer: '*TBD, Christoph Heindl, 2021 (unpublished)'-->
+---
+# Train Unrolling
+
+## Reparametrization Idea
+Note if $x_t \sim \mathcal{N}(\mu,\sigma)$, which we can express as $x_t \sim \mathcal{N}(0,1)\sigma + \mu$. 
+
+Now $\frac{\partial}{\partial \mu}$, $\frac{\partial}{\partial \sigma}$ exist and randomness becomes an input (for which we do not require gradients).
+
+## Reparametrization of Categorical Distributions
+
+Similar reparametrization exists for $x_t \sim \mathcal{Cat}(\pi_1,\ldots,\pi_C)$
+using Gumbel distribution*, which allows us to write 
+$$
+x_t \sim g(Gumbel(0,1),\pi_1, \ldots ,\pi_C,\tau),
+$$
+such that $\frac{\partial{g}}{\partial \pi_i}$ exists.
+<!--_footer: 'Categorical Reparameterization with Gumbel-Softmax, Eric Jang et al., 2017</br> The Concrete Distribution: A Continuous Relaxation of Discrete Random Variables, C. Maddison et al., 2017 - '-->
 ---
 
 ![bg fit right:50%](compare_curves_train_unroll.svg)

@@ -257,7 +257,7 @@ Relies on sparsity of access during computation. Introduce *queues* (i.e rolling
 
 Similar to updates in recurrent neural nets.
 
-<!--_footer: '*Fast WaveNet Generation Algorithm, Tom le Paine et al., 2016 '-->
+<!--_footer: '*Fast WaveNet Generation Algorithm, Tom le Paine et al., 2016. </br> For even faster generation check Parallel WaveNet: Fast High-Fidelity Speech Synthesis, Aaron van den Oord et al., 2017.'-->
 
 ---
 # Train Unrolling*

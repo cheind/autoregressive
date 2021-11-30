@@ -355,8 +355,7 @@ The following graph shows four samples drawn from the models' prior distribution
 
 The following graphs depict samples using different periodicity conditions: Large period (~20secs), short periods (~5secs). Model trained without unrolling.
 
-![center fit h:256](wavenet-generate-condition15.svg)
-![center fit h:256](wavenet-generate-condition1.svg)
+![center fit h:256](wavenet-generate-condition15.svg) ![center fit h:256](wavenet-generate-condition1.svg)
 
 ---
 

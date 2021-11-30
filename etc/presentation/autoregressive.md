@@ -23,11 +23,13 @@ img[alt~="center"] {
 <style scoped>section { font-size: 30px; }</style>
 
 # Autoregressive Models
-The *WaveNet** Architecture
+The *WaveNet* Architecture; `with code*`
 **Christoph Heindl**
 12/2021
 ![center fit](wave.png)
-
+<!-- 
+_footer: '*https://github.com/cheind/autoregressive'
+-->
 ---
 <!-- 
 _footer: '*https://arxiv.org/abs/1609.03499'
@@ -40,19 +42,18 @@ Aaron van den Oord, et al.
 [@deepmind](https://deepmind.com/blog/article/wavenet-generative-model-raw-audio),  2016
 
 ## Contributions
-- Models the wave-form directly (16kHz)
-- Generates one time sample at a time
+- Generative model for wave-form forms
 - Capable of capturing important audio structure at many time-scales
-- Allows for conditional generation
+- Conditioning support
 
-Led to the **most natural-sounding** speech/audio at the time.
+Led to the **most natural-sounding** speech/audio synthesis at the time.
 
 ---
 
 # Content
 
 This talk covers
- - an introduction to autoregressive models and their limitations,
+ - an introduction to autoregressive models and some of their limitations,
  - the architectural ideas to overcome those limitations, and
  - few of existing improvements.
 
@@ -119,7 +120,7 @@ This induces a form of **causality**, as the distribution over a future variable
 # Lagged Autoregressive Models
 
 For computational reasons, one usually limits the number of past observations influencing future predictions.
-An autoregressive model of order/lag $R$ is defined as
+An autoregressive model of order/lag/receptive-field $R$ is defined as
 $$
 \begin{equation*}
 X_t\,|\,\mathbf{X}_{j<t} = \theta_0 + \sum_{i=1}^{R} \theta_i X_{t-i} + \epsilon_t,

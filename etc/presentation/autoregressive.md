@@ -298,7 +298,7 @@ such that $\frac{\partial{g}}{\partial \pi_i}$ exists.
 
 # Setup
 
-Instead of audio waveforms as input, using a Fourier dataset with randomized coefficients, number of terms and periodicity.
+Instead of audio waveforms as input, using a Fourier dataset with randomized coefficients, number of terms and periodicity (sampling: 50Hz, quantization: 127 bins, encoding one-hot)
 
 ![fit center](fourier_samples.svg)
 

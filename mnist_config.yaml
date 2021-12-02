@@ -66,14 +66,18 @@ model:
   - 8
   - 16
   - 32
+  - 64
+  - 128
   - 1
   - 2
   - 4
   - 8
   - 16
   - 32
+  - 64
+  - 128
   wave_kernel_size: 2
-  wave_channels: 32
+  wave_channels: 48
   cond_channels: 10
   input_kernel_size: 5
   train_opts:

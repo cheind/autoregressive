@@ -65,17 +65,56 @@ model:
   - 4
   - 8
   - 16
-  - 32
-  - 64
-  - 128
   - 1
   - 2
   - 4
   - 8
   - 16
-  - 32
-  - 64
-  - 128
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
   wave_kernel_size: 2
   wave_channels: 48
   cond_channels: 10
@@ -92,7 +131,7 @@ model:
 data:
   class_path: autoregressive.datasets.MNISTDataModule
   init_args:
-    quantization_levels: 256
+    binarize: true
     batch_size: 64
     num_workers: 0
     digit_conditioning: true

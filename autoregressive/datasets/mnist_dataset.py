@@ -24,17 +24,21 @@ class MNISTSeriesDataset(MNIST):
         root: str,
         train: bool = True,
         transform: Callable[[sd.SeriesMeta], tuple[sd.SeriesMeta]] = None,
+        binarize: bool = False,
         download: bool = False,
     ) -> None:
         super().__init__(
             root, train=train, download=download, transform=None, target_transform=None
         )
         self.series_transform = transform
+        self.binarize = binarize
 
     def __getitem__(self, index: int) -> sd.SeriesMeta:
         x, y = super().__getitem__(index)
         x = np.asarray(x)
         x = torch.tensor(x)
+        if self.binarize:
+            x = (x > 127).int()
         series = {"x": peano_map(x).long()}
         meta = {"digit": torch.tensor(y)}
         if self.series_transform is not None:
@@ -45,13 +49,14 @@ class MNISTSeriesDataset(MNIST):
 class MNISTDataModule(pl.LightningDataModule):
     def __init__(
         self,
-        quantization_levels: int = 256,
+        binarize: bool = True,
         batch_size: int = 64,
         num_workers: int = 0,
         digit_conditioning: bool = False,
     ):
         super().__init__()
-        self.quantization_levels = quantization_levels
+        self.quantization_levels = 2 if binarize else 256
+        self.binarize = binarize
         self.c = digit_conditioning
         self.num_workers = num_workers
         self.batch_size = batch_size
@@ -65,11 +70,19 @@ class MNISTDataModule(pl.LightningDataModule):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = MNISTSeriesDataset(
-                "./tmp", train=True, download=True, transform=transform
+                "./tmp",
+                train=True,
+                download=True,
+                binarize=binarize,
+                transform=transform,
             )
             self.train_ds, self.val_ds = random_split(data, [55000, 5000])
             self.test_ds = MNISTSeriesDataset(
-                "./tmp", train=False, download=True, transform=transform
+                "./tmp",
+                train=False,
+                download=True,
+                binarize=binarize,
+                transform=transform,
             )
 
     def train_dataloader(self):
@@ -148,7 +161,7 @@ def main():
 
     # demo_peano()
     # print(_make_peano_mnist_ids())
-    dm = MNISTDataModule(digit_conditioning=True)
+    dm = MNISTDataModule(digit_conditioning=True, binarize=True)
     series, meta = dm.train_ds[0]
     plt.imshow(peano_inv_map(series["x"]))
     plt.show()

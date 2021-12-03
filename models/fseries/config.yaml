@@ -78,6 +78,7 @@ model:
   wave_kernel_size: 2
   wave_channels: 32
   input_kernel_size: 7
+  conv_bias: true
   train_opts:
     skip_partial: false
     lr: 0.01

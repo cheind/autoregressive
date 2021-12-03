@@ -48,34 +48,42 @@ class WaveNetLayer(WaveLayerBase):
         self,
         kernel_size: int,
         dilation: int,
-        wave_channels: int = 32,
+        residual_channels: int = 32,
+        skip_channels: int = 32,
         cond_channels: int = None,
         bias: bool = False,
     ):
         super().__init__(
             kernel_size=kernel_size,
             dilation=dilation,
-            in_channels=wave_channels,
+            in_channels=residual_channels,
         )
-        self.wave_channels = wave_channels
+        self.residual_channels = residual_channels
+        self.skip_channels = skip_channels
         self.cond_channels = cond_channels
         self.conv_dilation = torch.nn.Conv1d(
-            wave_channels,
-            2 * wave_channels,  # We stack W f,k and W g,k, similar to PixelCNN
+            residual_channels,
+            2 * residual_channels,  # We stack W f,k and W g,k, similar to PixelCNN
             kernel_size=kernel_size,
             dilation=dilation,
             bias=bias,
         )
+        self.conv_res = torch.nn.Conv1d(
+            residual_channels,
+            residual_channels,
+            kernel_size=1,
+            bias=bias,
+        )
         self.conv_skip = torch.nn.Conv1d(
-            wave_channels,
-            wave_channels,
+            residual_channels,
+            skip_channels,
             kernel_size=1,
             bias=bias,
         )
         if cond_channels is not None:
             self.conv_cond = torch.nn.Conv1d(
                 cond_channels,
-                wave_channels * 2,
+                residual_channels * 2,
                 kernel_size=1,
                 bias=bias,
             )
@@ -87,14 +95,16 @@ class WaveNetLayer(WaveLayerBase):
             assert c is not None, "conditioning required"
             x_cond = self.conv_cond(c)
             x_dilated = x_dilated + x_cond
-        x_filter = torch.tanh(x_dilated[:, : self.wave_channels])
-        x_gate = torch.sigmoid(x_dilated[:, self.wave_channels :])
+        x_filter = torch.tanh(x_dilated[:, : self.residual_channels])
+        x_gate = torch.sigmoid(x_dilated[:, self.residual_channels :])
         x_h = x_gate * x_filter
         skip = self.conv_skip(x_h)
+        res = self.conv_res(x_h)
+
         if causal_pad:
-            out = x + skip
+            out = x + res
         else:
-            out = x[..., self.causal_left_pad :] + skip
+            out = x[..., self.causal_left_pad :] + res
         return out, skip
 
 
@@ -103,19 +113,19 @@ class WaveNetInputLayer(WaveLayerBase):
         self,
         quantization_levels: int,
         kernel_size: int = 1,
-        wave_channels: int = 32,
+        residual_channels: int = 32,
         bias: bool = False,
     ):
         super().__init__(
             kernel_size=kernel_size, dilation=1, in_channels=quantization_levels
         )
-        self.wave_channels = wave_channels
+        self.residual_channels = residual_channels
         self.input_channels = quantization_levels
         self.conv = torch.nn.Conv1d(
             quantization_levels,
-            wave_channels,
+            residual_channels,
             kernel_size=kernel_size,
-            dilation=self.dilation,
+            dilation=1,
             bias=bias,
         )
 
@@ -129,22 +139,22 @@ class WaveNetInputLayer(WaveLayerBase):
 class WaveNetLogitsHead(WaveLayerBase):
     def __init__(
         self,
-        wave_channels: int,
+        skip_channels: int,
         out_channels: int,
         bias: bool = True,
     ):
-        super().__init__(kernel_size=1, dilation=1, in_channels=wave_channels)
+        super().__init__(kernel_size=1, dilation=1, in_channels=skip_channels)
         self.transform = torch.nn.Sequential(
             torch.nn.LeakyReLU(),  # note, we perform non-lin first (i.e on sum of skips) # noqa:E501
             torch.nn.Conv1d(
-                wave_channels,
-                wave_channels * 2,
+                skip_channels,
+                skip_channels,
                 kernel_size=1,
                 bias=bias,
             ),  # enlarge and squeeze (not based on paper)
             torch.nn.LeakyReLU(),
             torch.nn.Conv1d(
-                wave_channels * 2,
+                skip_channels,
                 out_channels,
                 kernel_size=1,
                 bias=bias,
@@ -153,8 +163,7 @@ class WaveNetLogitsHead(WaveLayerBase):
 
     def forward(self, encoded, skips):
         del encoded
-        skips = skips[1:]  # remove input-layer dummy skip
-        return self.transform(torch.stack(skips, dim=0).sum(dim=0))
+        return self.transform(sum(skips[1:]))
 
 
 @dataclasses.dataclass
@@ -175,7 +184,8 @@ class WaveNet(pl.LightningModule):
         quantization_levels: int = 2 ** 8,
         wave_dilations: list[int] = [2 ** i for i in range(8)] * 2,
         wave_kernel_size: int = 2,
-        wave_channels: int = 32,
+        residual_channels: int = 32,
+        skip_channels: int = 32,
         cond_channels: int = None,
         input_kernel_size: int = 1,
         conv_bias: bool = False,
@@ -186,7 +196,7 @@ class WaveNet(pl.LightningModule):
             WaveNetInputLayer(
                 kernel_size=input_kernel_size,
                 quantization_levels=quantization_levels,
-                wave_channels=wave_channels,
+                residual_channels=residual_channels,
                 bias=True,
             )
         ]
@@ -194,7 +204,8 @@ class WaveNet(pl.LightningModule):
             WaveNetLayer(
                 kernel_size=wave_kernel_size,
                 dilation=d,
-                wave_channels=wave_channels,
+                residual_channels=residual_channels,
+                skip_channels=skip_channels,
                 cond_channels=cond_channels,
                 bias=conv_bias,
             )
@@ -202,7 +213,7 @@ class WaveNet(pl.LightningModule):
         ]
         self.layers = torch.nn.ModuleList(layers)
         self.logits = WaveNetLogitsHead(
-            wave_channels=wave_channels,
+            skip_channels=skip_channels,
             out_channels=quantization_levels,
             bias=True,
         )
@@ -284,6 +295,7 @@ class WaveNet(pl.LightningModule):
         # Combine losses
         loss = one_loss + self.train_opts.train_ro_loss_lambda * n_loss
         self.log("train_loss", loss)
+        self._log_training_details(batch_idx)
         return {"loss": loss, "train_loss": loss.detach()}
 
     def validation_step(self, batch, batch_idx):
@@ -316,7 +328,7 @@ class WaveNet(pl.LightningModule):
             # in functional generators and rolling origin.
             cond = series["c"].float()
             if cond.shape[-1] == series["x"].shape[-1]:
-                # local conditioning
+                # local conditioning - cut to same length as inputs
                 cond = cond[..., :-1]
 
         if horizon == 1:
@@ -351,3 +363,20 @@ class WaveNet(pl.LightningModule):
         avg_acc = torch.stack([x["val_acc"] for x in outputs]).mean()
         self.log("val_loss_epoch", avg_loss, prog_bar=False)
         self.log("val_acc_epoch", avg_acc, prog_bar=True)
+
+    def _log_training_details(self, batch_idx: int):
+        if batch_idx % 100 != 0:
+            return
+
+        histogram_inputs = [(f"layer{0}_conv", self.layers[0].conv)]
+        for i in range(1, len(self.layers)):
+            layer: WaveNetLayer = self.layers[i]
+            histogram_inputs.append((f"layer{i}_dilation", layer.conv_dilation))
+            histogram_inputs.append((f"layer{i}_skip", layer.conv_skip))
+            histogram_inputs.append((f"layer{i}_res", layer.conv_res))
+            if layer.cond_channels:
+                histogram_inputs.append((f"layer{i}_cond", layer.conv_cond))
+
+        tb = self.logger.experiment
+        for h in histogram_inputs:
+            tb.add_histogram(h[0], h[1].weight, global_step=self.global_step)

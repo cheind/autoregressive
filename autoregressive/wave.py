@@ -19,7 +19,7 @@ def wave_init_weights(m):
     if isinstance(m, torch.nn.Conv1d):
         torch.nn.init.xavier_uniform_(m.weight)
         if m.bias is not None:
-            torch.nn.init.normal_(m.bias, std=1e-3)
+            torch.nn.init.normal_(m.bias, mean=1e-3, std=1e-2)
 
 
 def compute_receptive_field(
@@ -50,6 +50,7 @@ class WaveNetLayer(WaveLayerBase):
         dilation: int,
         wave_channels: int = 32,
         cond_channels: int = None,
+        bias: bool = False,
     ):
         super().__init__(
             kernel_size=kernel_size,
@@ -63,17 +64,20 @@ class WaveNetLayer(WaveLayerBase):
             2 * wave_channels,  # We stack W f,k and W g,k, similar to PixelCNN
             kernel_size=kernel_size,
             dilation=dilation,
+            bias=bias,
         )
         self.conv_skip = torch.nn.Conv1d(
             wave_channels,
             wave_channels,
             kernel_size=1,
+            bias=bias,
         )
         if cond_channels is not None:
             self.conv_cond = torch.nn.Conv1d(
                 cond_channels,
                 wave_channels * 2,
                 kernel_size=1,
+                bias=bias,
             )
 
     def forward(self, x: torch.Tensor, c: torch.Tensor = None, causal_pad: bool = True):
@@ -100,6 +104,7 @@ class WaveNetInputLayer(WaveLayerBase):
         quantization_levels: int,
         kernel_size: int = 1,
         wave_channels: int = 32,
+        bias: bool = False,
     ):
         super().__init__(
             kernel_size=kernel_size, dilation=1, in_channels=quantization_levels
@@ -111,6 +116,7 @@ class WaveNetInputLayer(WaveLayerBase):
             wave_channels,
             kernel_size=kernel_size,
             dilation=self.dilation,
+            bias=bias,
         )
 
     def forward(self, x, c: torch.Tensor = None, causal_pad: bool = True):
@@ -121,15 +127,28 @@ class WaveNetInputLayer(WaveLayerBase):
 
 
 class WaveNetLogitsHead(WaveLayerBase):
-    def __init__(self, wave_channels: int, out_channels: int):
+    def __init__(
+        self,
+        wave_channels: int,
+        out_channels: int,
+        bias: bool = True,
+    ):
         super().__init__(kernel_size=1, dilation=1, in_channels=wave_channels)
         self.transform = torch.nn.Sequential(
             torch.nn.LeakyReLU(),  # note, we perform non-lin first (i.e on sum of skips) # noqa:E501
             torch.nn.Conv1d(
-                wave_channels, wave_channels * 2, kernel_size=1
+                wave_channels,
+                wave_channels * 2,
+                kernel_size=1,
+                bias=bias,
             ),  # enlarge and squeeze (not based on paper)
             torch.nn.LeakyReLU(),
-            torch.nn.Conv1d(wave_channels * 2, out_channels, kernel_size=1),  # logits
+            torch.nn.Conv1d(
+                wave_channels * 2,
+                out_channels,
+                kernel_size=1,
+                bias=bias,
+            ),  # logits
         )
 
     def forward(self, encoded, skips):
@@ -159,6 +178,7 @@ class WaveNet(pl.LightningModule):
         wave_channels: int = 32,
         cond_channels: int = None,
         input_kernel_size: int = 1,
+        conv_bias: bool = False,
         train_opts: WaveNetTrainOpts = WaveNetTrainOpts(),
     ):
         super().__init__()
@@ -167,6 +187,7 @@ class WaveNet(pl.LightningModule):
                 kernel_size=input_kernel_size,
                 quantization_levels=quantization_levels,
                 wave_channels=wave_channels,
+                bias=True,
             )
         ]
         layers += [
@@ -175,6 +196,7 @@ class WaveNet(pl.LightningModule):
                 dilation=d,
                 wave_channels=wave_channels,
                 cond_channels=cond_channels,
+                bias=conv_bias,
             )
             for d in wave_dilations
         ]
@@ -182,6 +204,7 @@ class WaveNet(pl.LightningModule):
         self.logits = WaveNetLogitsHead(
             wave_channels=wave_channels,
             out_channels=quantization_levels,
+            bias=True,
         )
         self.quantization_levels = quantization_levels
         self.conditioning_channels = cond_channels

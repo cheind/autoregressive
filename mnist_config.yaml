@@ -65,64 +65,32 @@ model:
   - 4
   - 8
   - 16
+  - 32
+  - 64
   - 1
   - 2
   - 4
   - 8
   - 16
+  - 32
+  - 64
   - 1
   - 2
   - 4
   - 8
   - 16
-  - 1
-  - 2
-  - 4
-  - 8
-  - 16
-  - 1
-  - 2
-  - 4
-  - 8
-  - 16
-  - 1
-  - 2
-  - 4
-  - 8
-  - 16
-  - 1
-  - 2
-  - 4
-  - 8
-  - 16
-  - 1
-  - 2
-  - 4
-  - 8
-  - 16
-  - 1
-  - 2
-  - 4
-  - 8
-  - 16
-  - 1
-  - 2
-  - 4
-  - 8
-  - 16
-  - 1
-  - 2
-  - 4
-  - 8
-  - 16
+  - 32
+  - 64
   wave_kernel_size: 2
-  wave_channels: 48
-  cond_channels: 10
-  input_kernel_size: 5
+  residual_channels: 32
+  skip_channels: 64
+  cond_channels: 64
+  input_kernel_size: 3
+  conv_bias: false
   train_opts:
     skip_partial: false
     lr: 0.001
-    sched_patience: 25
+    sched_patience: 70
     train_ro_horizon: 1
     train_ro_num_origins: null
     train_ro_loss_lambda: 1.0
@@ -134,4 +102,5 @@ data:
     binarize: true
     batch_size: 64
     num_workers: 0
-    digit_conditioning: true
+    digit_conditioning: false
+    posenc_conditioning: true

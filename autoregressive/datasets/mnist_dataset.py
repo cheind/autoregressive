@@ -13,6 +13,7 @@ from torch.utils.data import random_split
 from torchvision.datasets import MNIST
 
 from . import series_dataset as sd
+from .. import encoding
 
 _logger = logging.getLogger("pytorch_lightning")
 _logger.setLevel(logging.INFO)
@@ -53,6 +54,7 @@ class MNISTDataModule(pl.LightningDataModule):
         batch_size: int = 64,
         num_workers: int = 0,
         digit_conditioning: bool = False,
+        posenc_conditioning: bool = False,
     ):
         super().__init__()
         self.quantization_levels = 2 if binarize else 256
@@ -64,6 +66,11 @@ class MNISTDataModule(pl.LightningDataModule):
         if digit_conditioning:
             _logger.info("Added period conditioning: 10 condition channels required")
             transform = add_digit_conditioning
+        elif posenc_conditioning:
+            _logger.info(
+                f"Added positional conditioning: {POSENC.shape[0]} condition channels required"
+            )
+            transform = add_pos_conditioning
         else:
             transform = None
 
@@ -134,6 +141,16 @@ def add_digit_conditioning(sm: sd.SeriesMeta) -> sd.SeriesMeta:
     series, meta = sm
     d = F.one_hot(meta["digit"], num_classes=10).view(-1, 1)  # (C,1)
     series["c"] = d.float()
+    return series, meta
+
+
+POSENC = encoding.positional_encoding_lut(length=28 * 28, depth=64)
+
+
+def add_pos_conditioning(sm: sd.SeriesMeta) -> sd.SeriesMeta:
+    series, meta = sm
+    d = F.one_hot(meta["digit"], num_classes=10).view(-1, 1)  # (C,1)
+    series["c"] = POSENC
     return series, meta
 
 

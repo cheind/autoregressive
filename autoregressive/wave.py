@@ -309,15 +309,18 @@ class WaveNet(pl.LightningModule):
         series, _ = batch
         inputs: torch.Tensor = series["x"][..., :-1]  # (B,T)
         targets: torch.Tensor = series["x"][..., 1:]  # (B,T)
-        global_cond = None
+        cond = None
         if "c" in series:
             # TODO Note, we support only global conditioning in training for now,
             # until we figure out how to implement local conditioning nicely
             # in functional generators and rolling origin.
-            global_cond = series["c"].float()
+            cond = series["c"].float()
+            if cond.shape[-1] == series["x"].shape[-1]:
+                # local conditioning
+                cond = cond[..., :-1]
 
         if horizon == 1:
-            logits, _ = self.forward(inputs, c=global_cond)
+            logits, _ = self.forward(inputs, c=cond)  # supports local cond as well
             if self.train_opts.skip_partial:
                 r = self.receptive_field
                 logits = logits[..., r:]
@@ -331,7 +334,7 @@ class WaveNet(pl.LightningModule):
                 num_origins=num_origins,
                 random_origins=True,
                 skip_partial=self.train_opts.skip_partial,
-                global_cond=global_cond,
+                global_cond=cond,  # only supports global cond for now!
             )
             logits, targets = generators.collate_rolling_origin(logits, ridx, targets)
 

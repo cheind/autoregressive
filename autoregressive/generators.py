@@ -14,7 +14,6 @@ from functools import partial
 from typing import TYPE_CHECKING, Iterator, List, Tuple, Union
 
 import torch
-from torch.nn import init
 
 from . import encoding, sampling
 

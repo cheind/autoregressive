@@ -52,8 +52,10 @@ class WaveNetLayer(WaveLayerBase):
         residual_channels: int = 32,
         skip_channels: int = 32,
         cond_channels: int = None,
+        in_channels: int = None,
         bias: bool = False,
     ):
+        in_channels = in_channels or residual_channels
         super().__init__(
             kernel_size=kernel_size,
             dilation=dilation,
@@ -64,7 +66,7 @@ class WaveNetLayer(WaveLayerBase):
         self.skip_channels = skip_channels
         self.cond_channels = cond_channels
         self.conv_dilation = torch.nn.Conv1d(
-            residual_channels,
+            in_channels,
             2 * dilation_channels,  # We stack W f,k and W g,k, similar to PixelCNN
             kernel_size=kernel_size,
             dilation=dilation,
@@ -82,10 +84,20 @@ class WaveNetLayer(WaveLayerBase):
             kernel_size=1,
             bias=bias,
         )
+        self.conv_cond = None
         if cond_channels is not None:
             self.conv_cond = torch.nn.Conv1d(
                 cond_channels,
                 dilation_channels * 2,
+                kernel_size=1,
+                bias=bias,
+            )
+
+        self.conv_input = None
+        if in_channels != residual_channels:
+            self.conv_input = torch.nn.Conv1d(
+                in_channels,
+                residual_channels,
                 kernel_size=1,
                 bias=bias,
             )
@@ -102,6 +114,9 @@ class WaveNetLayer(WaveLayerBase):
         x_h = x_gate * x_filter
         skip = self.conv_skip(x_h)
         res = self.conv_res(x_h)
+
+        if self.conv_input is not None:
+            x = self.conv_input(x)  # convert to res channels
 
         if causal_pad:
             out = x + res
@@ -163,7 +178,7 @@ class WaveNetLogitsHead(WaveLayerBase):
 
     def forward(self, encoded, skips):
         del encoded
-        return self.transform(sum(skips[1:]))
+        return self.transform(sum(skips))
 
 
 @dataclasses.dataclass
@@ -197,10 +212,14 @@ class WaveNet(pl.LightningModule):
         super().__init__()
         in_channels = quantization_levels + extra_in_channels
         layers = [
-            WaveNetInputLayer(
+            WaveNetLayer(
                 kernel_size=input_kernel_size,
+                dilation=1,
                 in_channels=in_channels,
                 residual_channels=residual_channels,
+                dilation_channels=dilation_channels,
+                skip_channels=skip_channels,
+                cond_channels=cond_channels,
                 bias=True,
             )
         ]
@@ -380,13 +399,13 @@ class WaveNet(pl.LightningModule):
         if batch_idx % 100 != 0:
             return
 
-        histogram_inputs = [(f"layer{0}_conv", self.layers[0].conv)]
-        for i in range(1, len(self.layers)):
+        histogram_inputs = []
+        for i in range(len(self.layers)):
             layer: WaveNetLayer = self.layers[i]
             histogram_inputs.append((f"layer{i}_dilation", layer.conv_dilation))
             histogram_inputs.append((f"layer{i}_skip", layer.conv_skip))
             histogram_inputs.append((f"layer{i}_res", layer.conv_res))
-            if layer.cond_channels:
+            if layer.conv_cond:
                 histogram_inputs.append((f"layer{i}_cond", layer.conv_cond))
 
         tb = self.logger.experiment

@@ -56,7 +56,7 @@ def cli_main():
         # run=False,
         save_config_overwrite=True,
         trainer_defaults={
-            "callbacks": [ckpt, lrm, es],
+            "callbacks": [ckpt, lrm],
             "max_epochs": 30,
             "gpus": 1,
             "log_every_n_steps": 25,

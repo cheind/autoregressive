@@ -162,7 +162,6 @@ class FastGenerator:
                 device=device,
                 empty=False,
             )  # Populated with zeros will act like causal padding
-            print((batch_size, layer.in_channels, layer.causal_left_pad))
             queues.append(q)
         self.input_queues = queues
 

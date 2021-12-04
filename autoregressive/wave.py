@@ -59,7 +59,7 @@ class WaveNetLayer(WaveLayerBase):
         super().__init__(
             kernel_size=kernel_size,
             dilation=dilation,
-            in_channels=residual_channels,
+            in_channels=in_channels,
         )
         self.residual_channels = residual_channels
         self.dilation_channels = dilation_channels

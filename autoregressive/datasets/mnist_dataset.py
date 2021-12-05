@@ -26,6 +26,7 @@ class MNISTSeriesDataset(MNIST):
         train: bool = True,
         transform: Callable[[sd.SeriesMeta], tuple[sd.SeriesMeta]] = None,
         binarize: bool = False,
+        apply_peano_map: bool = True,
         download: bool = False,
     ) -> None:
         super().__init__(
@@ -33,6 +34,7 @@ class MNISTSeriesDataset(MNIST):
         )
         self.series_transform = transform
         self.binarize = binarize
+        self.apply_peano_map = apply_peano_map
 
     def __getitem__(self, index: int) -> sd.SeriesMeta:
         x, y = super().__getitem__(index)
@@ -40,7 +42,11 @@ class MNISTSeriesDataset(MNIST):
         x = torch.tensor(x)
         if self.binarize:
             x = (x > 127).int()
-        series = {"x": peano_map(x).long()}
+        if self.apply_peano_map:
+            x = peano_map(x)
+        else:
+            x = x.view(-1)
+        series = {"x": x.long()}
         meta = {"digit": torch.tensor(y)}
         if self.series_transform is not None:
             series, meta = self.series_transform((series, meta))
@@ -51,6 +57,7 @@ class MNISTDataModule(pl.LightningDataModule):
     def __init__(
         self,
         binarize: bool = True,
+        apply_peano_map: bool = True,
         batch_size: int = 64,
         num_workers: int = 0,
         digit_conditioning: bool = False,
@@ -81,6 +88,7 @@ class MNISTDataModule(pl.LightningDataModule):
                 train=True,
                 download=True,
                 binarize=binarize,
+                apply_peano_map=apply_peano_map,
                 transform=transform,
             )
             self.train_ds, self.val_ds = random_split(data, [55000, 5000])
@@ -89,6 +97,7 @@ class MNISTDataModule(pl.LightningDataModule):
                 train=False,
                 download=True,
                 binarize=binarize,
+                apply_peano_map=apply_peano_map,
                 transform=transform,
             )
 
@@ -154,7 +163,6 @@ POSENC = encoding.positional_encoding_lut(length=28 * 28, depth=64)
 
 def add_pos_conditioning(sm: sd.SeriesMeta) -> sd.SeriesMeta:
     series, meta = sm
-    d = F.one_hot(meta["digit"], num_classes=10).view(-1, 1)  # (C,1)
     series["c"] = POSENC
     return series, meta
 

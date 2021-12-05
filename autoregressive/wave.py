@@ -125,31 +125,6 @@ class WaveNetLayer(WaveLayerBase):
         return out, skip
 
 
-class WaveNetInputLayer(WaveLayerBase):
-    def __init__(
-        self,
-        in_channels: int,
-        kernel_size: int = 1,
-        residual_channels: int = 32,
-        bias: bool = False,
-    ):
-        super().__init__(kernel_size=kernel_size, dilation=1, in_channels=in_channels)
-        self.residual_channels = residual_channels
-        self.conv = torch.nn.Conv1d(
-            in_channels,
-            residual_channels,
-            kernel_size=kernel_size,
-            dilation=1,
-            bias=bias,
-        )
-
-    def forward(self, x, c: torch.Tensor = None, causal_pad: bool = True):
-        del c
-        p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
-        x = self.conv(F.pad(x, p))
-        return x, x.new_zeros(*x.shape)  # zeros are not changing head
-
-
 class WaveNetLogitsHead(WaveLayerBase):
     def __init__(
         self,

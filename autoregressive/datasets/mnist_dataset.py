@@ -130,6 +130,11 @@ PEANO_PERM_IDS = _make_peano_mnist_ids()
 
 
 def peano_map(x: torch.Tensor):
+    """Unroll image to 1D using Peano-curve.
+    Every pixel that is adjacent in the result is also adjacent in space. However,
+    for a pixel in the center column, its north neighbor is width pixels away.
+    The distance to north neighbors varies accross pixel columns.
+    """
     return x.view(-1)[PEANO_PERM_IDS]
 
 

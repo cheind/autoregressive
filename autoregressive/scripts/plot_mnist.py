@@ -2,8 +2,7 @@ import torch
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
-
-from ..datasets.mnist_dataset import peano_inv_map
+from mpl_toolkits.axes_grid1 import ImageGrid
 
 
 def main():
@@ -15,15 +14,13 @@ def main():
     pred_img[:, tstart:] = gen_img
 
     N = gen_img.shape[0]
-    fig, axs = plt.subplots(N, 2)
-    for (
-        idx,
-        (o, p),
-    ) in enumerate(zip(orig_img, pred_img)):
-        axs[idx, 0].imshow(peano_inv_map(o))
-        axs[idx, 1].imshow(peano_inv_map(p))
-        axs[idx, 0].set_aspect("auto")
-        axs[idx, 1].set_aspect("auto")
+    fig = plt.figure()
+    grid = ImageGrid(
+        fig, 111, nrows_ncols=(2, N), axes_pad=0.05, share_all=True, aspect=True
+    )
+    for (idx, (o, p)) in enumerate(zip(orig_img, pred_img)):
+        grid[idx].imshow(o.view(28, 28))
+        grid[N + idx].imshow(p.view(28, 28))
     plt.show()
 
 

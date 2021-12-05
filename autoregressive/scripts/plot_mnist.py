@@ -14,9 +14,16 @@ def main():
     tstart = data["curves"]["gen"]["t_range"][0]
     pred_img[:, tstart:] = gen_img
 
-    fig, axs = plt.subplots(1, 2)
-    axs[0].imshow(peano_inv_map(orig_img[0]))
-    axs[1].imshow(peano_inv_map(pred_img[0]))
+    N = gen_img.shape[0]
+    fig, axs = plt.subplots(N, 2)
+    for (
+        idx,
+        (o, p),
+    ) in enumerate(zip(orig_img, pred_img)):
+        axs[idx, 0].imshow(peano_inv_map(o))
+        axs[idx, 1].imshow(peano_inv_map(p))
+        axs[idx, 0].set_aspect("auto")
+        axs[idx, 1].set_aspect("auto")
     plt.show()
 
 

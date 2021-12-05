@@ -129,10 +129,12 @@ class WaveNetLogitsHead(WaveLayerBase):
     def __init__(
         self,
         skip_channels: int,
+        residual_channels: int,
         head_channels: int,
         out_channels: int,
         bias: bool = True,
     ):
+        del residual_channels
         super().__init__(kernel_size=1, dilation=1, in_channels=skip_channels)
         self.transform = torch.nn.Sequential(
             torch.nn.LeakyReLU(),  # note, we perform non-lin first (i.e on sum of skips) # noqa:E501
@@ -154,6 +156,50 @@ class WaveNetLogitsHead(WaveLayerBase):
     def forward(self, encoded, skips):
         del encoded
         return self.transform(sum(skips))
+
+
+class WaveNetLogitsAttnHead(WaveLayerBase):  # layer attention
+    def __init__(
+        self,
+        skip_channels: int,
+        residual_channels: int,
+        head_channels: int,
+        out_channels: int,
+        bias: bool = True,
+    ):
+        super().__init__(kernel_size=1, dilation=1, in_channels=skip_channels)
+        self.R = residual_channels
+
+        self.transform = torch.nn.Sequential(
+            torch.nn.LeakyReLU(),  # note, we perform non-lin first (i.e on sum of skips) # noqa:E501
+            torch.nn.Conv1d(
+                skip_channels - residual_channels,
+                head_channels,
+                kernel_size=1,
+                bias=bias,
+            ),  # enlarge and squeeze (not based on paper)
+            torch.nn.LeakyReLU(),
+            torch.nn.Conv1d(
+                head_channels,
+                out_channels,
+                kernel_size=1,
+                bias=bias,
+            ),  # logits
+        )
+
+    def forward(self, encoded, skips):
+        R = encoded.shape[1]
+        skips = torch.stack(skips, dim=1)  # B,L,S,T
+        query = encoded  # B,R,T
+        keys = skips[..., :R, :]  # B,L,R,T
+        values = skips[..., R:, :]  # B,L,(S-R),T
+
+        score = torch.einsum("blrt,brt->blt", keys, query)
+        attn = F.softmax(score, dim=1).unsqueeze(2)  # B,L,1,T
+        ctx = (values * attn).sum(1)  # B,(S-R),T
+
+        del encoded
+        return self.transform(ctx)
 
 
 @dataclasses.dataclass
@@ -211,8 +257,9 @@ class WaveNet(pl.LightningModule):
             for d in wave_dilations
         ]
         self.layers = torch.nn.ModuleList(layers)
-        self.logits = WaveNetLogitsHead(
+        self.logits = WaveNetLogitsAttnHead(
             skip_channels=skip_channels,
+            residual_channels=residual_channels,
             head_channels=head_channels,
             out_channels=quantization_levels,
             bias=True,

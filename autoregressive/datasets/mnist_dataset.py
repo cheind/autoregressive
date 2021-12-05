@@ -62,6 +62,7 @@ class MNISTDataModule(pl.LightningDataModule):
         num_workers: int = 0,
         digit_conditioning: bool = False,
         posenc_conditioning: bool = False,
+        seed: int = None,
     ):
         super().__init__()
         self.quantization_levels = 2 if binarize else 256
@@ -91,7 +92,11 @@ class MNISTDataModule(pl.LightningDataModule):
                 apply_peano_map=apply_peano_map,
                 transform=transform,
             )
-            self.train_ds, self.val_ds = random_split(data, [55000, 5000])
+            if seed:
+                g = torch.Generator().manual_seed(seed)
+            else:
+                g = torch.default_generator
+            self.train_ds, self.val_ds = random_split(data, [55000, 5000], generator=g)
             self.test_ds = MNISTSeriesDataset(
                 "./tmp",
                 train=False,

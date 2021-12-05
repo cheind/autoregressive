@@ -52,26 +52,14 @@ def test_wavenet_layer():
     )  # local cond, no pad (on input, not condition)
     assert x.shape == skip.shape == (1, 32, 1)
 
-
-@torch.no_grad()
-def test_wavenet_input_layer():
-    wn = wave.WaveNetInputLayer(
-        kernel_size=5, wave_channels=32, quantization_levels=256
+    # Test as input layer
+    wn = wave.WaveNetLayer(
+        kernel_size=5, dilation=1, in_channels=3, residual_channels=32, skip_channels=16
     )
     assert wn.causal_left_pad == 4
-    x, skip = wn(torch.rand(1, 256, 1))
+    x, skip = wn(torch.rand(1, 3, 1))
     assert x.shape == (1, 32, 1)
-    assert skip.shape == (1, 32, 1)
-
-    # disable padding
-    x, skip = wn(torch.rand(1, 256, 5), causal_pad=False)
-    assert x.shape == (1, 32, 1)
-    assert skip.shape == (1, 32, 1)
-
-    # condition, not used by layer, but passed in via caller
-    x, skip = wn(torch.rand(1, 256, 5), c=torch.rand(1, 1, 1), causal_pad=False)
-    assert x.shape == (1, 32, 1)
-    assert skip.shape == (1, 32, 1)
+    assert skip.shape == (1, 16, 1)
 
 
 @torch.no_grad()
@@ -80,7 +68,9 @@ def test_wavenet_encode():
         quantization_levels=4,
         wave_dilations=[1, 2, 4],
         wave_kernel_size=2,
-        wave_channels=8,
+        residual_channels=8,
+        dilation_channels=8,
+        skip_channels=8,
         input_kernel_size=1,
     )
     R = wn.receptive_field
@@ -103,7 +93,9 @@ def test_wavenet_encode():
         quantization_levels=4,
         wave_dilations=[1, 2, 4],
         wave_kernel_size=2,
-        wave_channels=8,
+        residual_channels=8,
+        dilation_channels=8,
+        skip_channels=8,
         cond_channels=3,
         input_kernel_size=5,
     )
@@ -188,7 +180,11 @@ def test_coverage_leakage():
 
     # Standard model
     model = wave.WaveNet(
-        quantization_levels=1, wave_dilations=[1, 2, 4], wave_channels=1
+        quantization_levels=1,
+        wave_dilations=[1, 2, 4],
+        residual_channels=1,
+        dilation_channels=1,
+        skip_channels=1,
     )
     check_gradients(model)
 
@@ -196,7 +192,9 @@ def test_coverage_leakage():
     model = wave.WaveNet(
         quantization_levels=1,
         wave_dilations=[1, 2, 4],
-        wave_channels=1,
+        residual_channels=1,
+        dilation_channels=1,
+        skip_channels=1,
         input_kernel_size=3,
     )
     check_gradients(model)
@@ -205,7 +203,9 @@ def test_coverage_leakage():
     model = wave.WaveNet(
         quantization_levels=1,
         wave_dilations=[1, 2, 4, 1, 2],
-        wave_channels=1,
+        residual_channels=1,
+        dilation_channels=1,
+        skip_channels=1,
         input_kernel_size=3,
     )
     check_gradients(model)

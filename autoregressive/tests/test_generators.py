@@ -40,7 +40,9 @@ def test_generators():
     # Pretty useless to use quantization level of 1, but we use floats in the tests.
     net = wave.WaveNet(
         quantization_levels=1,
-        wave_channels=8,
+        residual_channels=8,
+        dilation_channels=8,
+        skip_channels=8,
         input_kernel_size=3,
         wave_dilations=[1, 2, 4],
         cond_channels=3,
@@ -119,7 +121,9 @@ def test_compressed_generators():
     # Pretty useless to use quantization level of 1, but we use floats in the tests.
     net = wave.WaveNet(
         quantization_levels=4,
-        wave_channels=8,
+        residual_channels=8,
+        dilation_channels=8,
+        skip_channels=8,
         input_kernel_size=3,
         wave_dilations=[1, 2, 4],
     )
@@ -169,7 +173,9 @@ def test_rolling_origin():
     model = wave.WaveNet(
         wave_dilations=[1, 2, 4],
         quantization_levels=1,
-        wave_channels=8,
+        residual_channels=8,
+        dilation_channels=8,
+        skip_channels=8,
         cond_channels=3,
     )
     assert model.receptive_field == 8
@@ -215,7 +221,7 @@ def test_rolling_origin():
     # the following will fail if the random state has changed,
     # which might be ok (i.e. added lines of code that require
     # random numbers).
-    assert len(set(yidx.tolist()) & set([7, 11])) == 2
+    assert len(set(yidx.tolist()) & set([7, 10])) == 2
     _, _, yidx = generators.rolling_origin(
         model,
         identity_sampler,
@@ -235,7 +241,9 @@ def test_collate():
     model = wave.WaveNet(
         wave_dilations=[1, 2, 4],
         quantization_levels=4,
-        wave_channels=8,
+        residual_channels=8,
+        dilation_channels=8,
+        skip_channels=8,
     )
     assert model.receptive_field == 8
     seq = torch.rand(2, 4, 16)

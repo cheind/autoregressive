@@ -58,7 +58,7 @@ This talk covers
  - few of existing improvements.
 
 This talk is not
- - about audio/speech (we use time series instead),
+ - about audio/speech (we use time series / images instead),
  - a comprehensive state-of-the-art presentation on generative models.
 
 Accompanying code: https://github.com/cheind/autoregressive
@@ -306,10 +306,19 @@ such that $\frac{\partial{g}}{\partial \pi_i}$ exists. Here $\tau$ is a temperat
 ![center](wavenet-unroll-fwd-bwd.svg)
 
 ---
-# Experiments
+# Image Domain
+
+The WaveNet idea extends to 2D spatial domain*. In this library the most straightforward approach is chosen: unrolling the image to a 1D signal. A 3x3 image (left) is unrolled using scanline approach to a 1D signal (right), which can then be fed to a standard WaveNet.
+
+![center fit](wavenet-image.svg)
+
+
+<!-- _footer: 'Oord, Aaron van den, et al. "Conditional image generation with pixelcnn decoders." arXiv preprint arXiv:1606.05328 (2016).' -->
+---
+# 1D Signal Experiments
 ---
 
-# Setup
+# 1D Signal Setup
 
 Instead of audio waveforms as input, using a Fourier dataset with randomized coefficients, number of terms and periodicity (sampling: 50Hz, quantization: 127 bins, encoding one-hot)
 
@@ -343,7 +352,6 @@ N-step prediction based on noisy observations - comparison between two models tr
 (-) Accuracy of both modes decreases
 
 ---
-
 ![bg fit right:45%](compare_val_acc.svg)
 
 # Train-Unrolling Validation Acc. Results
@@ -355,7 +363,6 @@ N-step prediction based on noisy observations - comparison between two models tr
 (+) Similar picture if validation unrolling > train unrolling steps.
 
 ---
-
 # Generative Results
 
 The following graph shows four samples drawn from the models' prior distribution (periodicity fixed in training).
@@ -363,7 +370,6 @@ The following graph shows four samples drawn from the models' prior distribution
 ![center w:1024](prior_samples.svg)
 
 ---
-
 # Conditional Generative Results
 
 The following graphs depict samples using different periodicity conditions: Large period (~20secs), short periods (~5secs). Model trained without unrolling.
@@ -371,9 +377,7 @@ The following graphs depict samples using different periodicity conditions: Larg
 ![center fit h:256](wavenet-generate-condition15.svg) ![center fit h:256](wavenet-generate-condition1.svg)
 
 ---
-
 ![bg fit right:50%](benchmark_generators.svg)
-
 # Runtime Performance Results
 <!-- _footer: '*Performed on a 1080 Ti' -->
 The plot to the left shows default (blue) and fast (orange) sample generation* using 64 wave-channels, 8 quantization levels and 32 batch-size.
@@ -381,4 +385,74 @@ The plot to the left shows default (blue) and fast (orange) sample generation* u
 ## Conclusion
 (+) Fast method avoids exponential inference time as layer depth increases.
 (-) Code overhead is considerable.
+
+---
+# 2D Image Experiments
+
+---
+# 2D Image Setup
+
+We use the MNIST dataset, which consists of images taken from 10 digit classes (0..9). 
+Sampling: 28x28pixels, quantization: 256 bins, encoding one-hot.
+Train/Val/Test splits as suggested.
+
+![center w:600](mnist-example.png)
+
+---
+![bg fit right:40%](wavenet-sample-q256.png)
+# MNIST Sampling Results
+Samples drawn from $p(\mathbf{x} \mid y)$, where $\mathbf{x}$ is an MNIST 28x28 image and $y$ is the digit. Quantization levels set to 256, receptive field $R$=600.
+
+Note
+- Almost all generated images contain human recognizable digits of the given target class.
+- Fading effect to soften digit edges is captured by model
+
+Side note on Z-filling curves
+- I played around with other z-filling curves for unrolling such as Peano curves, but the results have been considerably worse. I believe that's due to the effect that the distance to the north pixel varies across image columns.
+
+---
+![bg fit right:50%](wavenet-infill-q256-o392.png)
+# MNIST Completion Results
+
+MNIST image reconstructions drawn from 
+$$
+p(x_{N+1},\ldots,x_{T} \mid x_1,\ldots,x_{N},y),
+$$
+where $x_i$ denotes the i-th MNIST 28x28 image intensity value and $y$ is the digit class. Quantization levels set to 256, receptive field $R$ to 600. Left: original images, Right: reconstructed image after observing $N$=392 (first image half). Images are from the test set.
+
+Note
+- Digit style is maintained during generation (thick strokes vs. thin strokes) 
+- Fading effect to soften digit edges is captured by model
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

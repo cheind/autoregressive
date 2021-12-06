@@ -12,17 +12,17 @@ from .. import datasets, generators, sampling, wave
 class SampleDigitsCommand:
     def __init__(
         self,
-        ckpt: str = None,
+        ckpt: str,
         num_samples_per_digit: int = 10,
         img_shape: str = "28x28",
     ) -> None:
         self.num_samples_per_digit = num_samples_per_digit
         self.img_shape = list(map(int, img_shape.split("x")))
-        self.ckpt = ckpt
+        self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     @torch.no_grad()
     def run(self, dev: torch.device):
-        model = wave.WaveNet.load_from_checkpoint(self.ckpt).to(dev).eval()
+        model = self.model.to(dev).eval()
         seeds = torch.zeros(
             (10, self.num_samples_per_digit), dtype=torch.long, device=dev
         ).view(-1, 1)
@@ -68,12 +68,10 @@ class InfillDigitsCommand:
     ) -> None:
         self.num_images = num_images
         self.num_pix_observed = num_pix_observed
-        self.ckpt = ckpt
-
         with open(config, "r") as f:
             plcfg = yaml.safe_load(f.read())
         self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
-        self.model = wave.WaveNet.load_from_checkpoint(self.ckpt).eval()
+        self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     def _load_images_targets(self):
         ds = self.data.test_dataloader().dataset

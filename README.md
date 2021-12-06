@@ -13,6 +13,7 @@ Currently the following features are implemented
  - Conditioning support (*oord2016wavenet*)
  - Fast generation based on (*paine2016fast*)
  - Fully differentiable n-step unrolling in training (*heindl2021autoreg*)
+ - 2D image support using MNIST dataset
  - A randomized Fourier dataset
 
 ## Presentation

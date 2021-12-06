@@ -7,6 +7,7 @@ theme: default
 #color: #33
 math: katex
 ---
+<!-- footer: 'Christoph Heindl | https://github.com/cheind/autoregressive | 2021' -->
 <!-- 
 _class: lead
 _paginate: false
@@ -27,9 +28,7 @@ The *WaveNet* Architecture; `with code*`
 **Christoph Heindl**
 12/2021
 ![center fit](wave.png)
-<!-- 
-_footer: '*https://github.com/cheind/autoregressive'
--->
+
 ---
 <!-- 
 _footer: '*https://arxiv.org/abs/1609.03499'
@@ -168,8 +167,8 @@ For multi-time scale models (speech, audio) this becomes quickly an issue.
 # Convolutions: Improving Training Efficiency
 
 Interpret $X_t\,|\,\mathbf{X}_{j<t}$ in terms of convolution. Allows for a fully-convolutional computation of all $X_t$ in one sweep. Below illustration is for a model of $R=3$.
-![center](fc_vs_conv.svg)
-## Need to be careful about (see Causal Padding slides)
+![center w:550](fc_vs_conv.svg)
+### Need to be careful about (see Causal Padding slides)
  - Ensure no data leakage happens (i.e input restricted to $\mathbf{x}_{j<t}$)
  - How to handle variables $X_{t}$, where $t<R$
 

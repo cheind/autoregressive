@@ -165,5 +165,7 @@ def main():
 
 
 if __name__ == "__main__":
-    # python -m autoregressive.scripts.predict_mnist sample --ckpt "v56\checkpoints\wavenet-epoch=06-val_acc_epoch=0.9705.ckpt"
+    # python -m autoregressive.scripts.predict_mnist sample --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
+
+    # python -m autoregressive.scripts.predict_mnist infill --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
     main()

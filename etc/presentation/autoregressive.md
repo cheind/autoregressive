@@ -400,7 +400,7 @@ Train/Val/Test splits as suggested.
 ---
 ![bg fit right:40%](wavenet-sample-q256.png)
 # MNIST Sampling Results
-Samples drawn from $p(\mathbf{x} \mid y)$, where $\mathbf{x}$ is an MNIST 28x28 image and $y$ is the digit.
+Samples drawn from $p(\mathbf{X}=\mathbf{x} \mid Y=y)$, where $\mathbf{x}$ is an MNIST 28x28 image and $y$ is the digit.
 
 Note
 - Almost all generated images contain human recognizable digits of the given target class.
@@ -415,9 +415,9 @@ Side note on Z-filling curves
 
 MNIST image reconstructions drawn from 
 $$
-p(x_{N+1},\ldots,x_{T} \mid x_1,\ldots,x_{N},y),
+p(X_{N+1},\ldots,X_{T} \mid X_1,\ldots,X_{N},Y=y),
 $$
-where $x_i$ denotes the i-th MNIST 28x28 image intensity value and $y$ is the digit class. 
+where $X_i$ denotes a random variable corresponding to the i-th (unrolled) MNIST 28x28 image pixel value and $y$ is the digit class. 
 
 Left: original images, Right: reconstructed image after observing $N$=392 (first image half). Images are from the test set.
 

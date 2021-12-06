@@ -401,7 +401,7 @@ Train/Val/Test splits as suggested.
 ---
 ![bg fit right:40%](wavenet-sample-q256.png)
 # MNIST Sampling Results
-Samples drawn from $p(\mathbf{x} \mid y)$, where $\mathbf{x}$ is an MNIST 28x28 image and $y$ is the digit. Quantization levels set to 256, receptive field $R$=600.
+Samples drawn from $p(\mathbf{x} \mid y)$, where $\mathbf{x}$ is an MNIST 28x28 image and $y$ is the digit.
 
 Note
 - Almost all generated images contain human recognizable digits of the given target class.
@@ -418,7 +418,9 @@ MNIST image reconstructions drawn from
 $$
 p(x_{N+1},\ldots,x_{T} \mid x_1,\ldots,x_{N},y),
 $$
-where $x_i$ denotes the i-th MNIST 28x28 image intensity value and $y$ is the digit class. Quantization levels set to 256, receptive field $R$ to 600. Left: original images, Right: reconstructed image after observing $N$=392 (first image half). Images are from the test set.
+where $x_i$ denotes the i-th MNIST 28x28 image intensity value and $y$ is the digit class. 
+
+Left: original images, Right: reconstructed image after observing $N$=392 (first image half). Images are from the test set.
 
 Note
 - Digit style is maintained during generation (thick strokes vs. thin strokes) 

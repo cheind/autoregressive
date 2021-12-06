@@ -405,7 +405,7 @@ Samples drawn from $p(\mathbf{x} \mid y)$, where $\mathbf{x}$ is an MNIST 28x28 
 
 Note
 - Almost all generated images contain human recognizable digits of the given target class.
-- Fading effect to soften digit edges is captured by model
+- Fading effect to soften hard edges is captured by the model
 
 Side note on Z-filling curves
 - I played around with other z-filling curves for unrolling such as Peano curves, but the results have been considerably worse. I believe that's due to the effect that the distance to the north pixel varies across image columns.
@@ -422,7 +422,7 @@ where $x_i$ denotes the i-th MNIST 28x28 image intensity value and $y$ is the di
 
 Note
 - Digit style is maintained during generation (thick strokes vs. thin strokes) 
-- Fading effect to soften digit edges is captured by model
+- Fading effect to soften hard edges is captured by the model
 
 
 

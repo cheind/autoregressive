@@ -72,7 +72,7 @@ class MNISTDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
 
         if digit_conditioning:
-            _logger.info("Added period conditioning: 10 condition channels required")
+            _logger.info("Added digit conditioning: 10 condition channels required")
             transform = add_digit_conditioning
         elif posenc_conditioning:
             _logger.info(

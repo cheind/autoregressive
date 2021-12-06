@@ -34,6 +34,7 @@ def compute_log_pxy(imgs: torch.Tensor, model: wave.WaveNet):
     #            = log sum_y exp(log p(X=x|Y=y)p(Y=y))
     #            = log sum_y exp(log p(X=x|Y=y) + log p(Y=y))
     #            = log sum_y exp(log p(X0|Y=y)p(X1|X0,Y=y)...p(XT|XT-1...X0,Y=y) + log p(Y=y))
+    #            = log sum_y exp(log p(X0|Y=y)+log p(X1|X0,Y=y)+...+log p(XT|XT-1...X0,Y=y) + log p(Y=y))
     # this can be conveniently computed using torch.logsumexp
     Y = model.conditioning_channels
     Q = model.quantization_levels
@@ -51,8 +52,15 @@ def compute_log_pxy(imgs: torch.Tensor, model: wave.WaveNet):
     for y in range(10):
         logits, _ = model.forward(x=imgs, c=y_conds[y : y + 1])  # (B,Q,T)
         log_px_y = F.log_softmax(logits, 1)
+        # plt.imshow(torch.exp(log_px_y)[0, 0, :].cpu().view(28, 28))
+        # plt.show()
+        log_px_y = log_px_y[
+            ..., :-1
+        ]  # TODO document what's happening here: predictions vs input
         log_px_y = log_px_y.permute(0, 2, 1).reshape(-1, Q)  # (B*T,Q)
-        log_px_y = log_px_y[torch.arange(B * T), imgs.view(-1)].view(B, T)  # (B,T)
+        log_px_y = log_px_y[torch.arange(B * (T - 1)), imgs[:, 1:].reshape(-1)].view(
+            B, (T - 1)
+        )  # (B,T)
         log_pxy = log_px_y.sum(-1) + log_py
         log_pxys.append(log_pxy)
         del logits
@@ -212,18 +220,96 @@ class DensityEstimationCommand:
         imgs = torch.stack(imgs, 0).to(dev)
         log_pxys = compute_log_pxy(imgs, model)
         log_px = torch.logsumexp(log_pxys, -1)
-        print("p(x) x~p(MNIST)", log_px)
+        print("log p(x) x~p(MNIST)", log_px)
 
         imgs_rand = torch.randint(0, 256, (5, 784)).to(dev)
         log_pxys = compute_log_pxy(imgs_rand, model)
         log_px = torch.logsumexp(log_pxys, -1)
-        print("p(x) x~U(0,255)", log_px)
+        print("log p(x) x~U(0,255)", log_px)
 
     @staticmethod
     def add_arguments_to_parser(outer_parser):
         parser = jsonargparse.ArgumentParser()
         parser.add_class_arguments(DensityEstimationCommand, None)
         outer_parser.add_subcommand("density", parser)
+
+
+class ClassificationCommand:
+    """Estimates marginal log p(Y=y|X=x), assuming p(Y=y)=1/|Y|"""
+
+    def __init__(
+        self,
+        ckpt: str,
+        config: str,
+        num_images: int = 5,
+    ) -> None:
+        """
+        Args:
+            ckpt: Path to model parameters
+            config: Path to config.yaml to read datamodule configuration from
+            num_images: Number of images to generate
+        """
+        self.num_images = num_images
+        with open(config, "r") as f:
+            plcfg = yaml.safe_load(f.read())
+        self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
+        self.data.batch_size = 10
+        self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
+
+    @torch.no_grad()
+    def run(self, dev: torch.device):
+        self.plot_hist(dev)
+        # model = self.model.to(dev)
+
+        # dl = self.data.train_dataloader()
+
+        # series, meta = next(iter(dl))
+        # imgs = series["x"].to(dev)
+        # targets = torch.tensor([m["digit"] for m in meta]).to(dev)
+
+        # log_pxys = compute_log_pxy(imgs, model)
+        # log_px = torch.logsumexp(log_pxys, -1)
+        # py_x = torch.exp(log_pxys - log_px.unsqueeze(-1))
+
+    def plot_hist(self, dev: torch.device):
+        model = self.model.to(dev)
+
+        dl = self.data.test_dataloader()
+
+        batch = next(iter(dl))
+        imgs = batch[0]["x"]
+        py_x, targets = self._compute_batch_results(batch, model, dev)
+        fig, axs = plt.subplots(self.data.batch_size, 2, sharex="col", sharey="col")
+        for i in range(self.data.batch_size):
+            axs[i, 0].imshow(imgs[i].view(28, 28))
+            axs[i, 1].bar(torch.arange(0, 10, 1).float(), py_x[i].cpu())
+            axs[i, 0].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+            if i < self.data.batch_size - 1:
+                axs[i, 1].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+            else:
+                axs[i, 1].set(
+                    xticks=torch.arange(0, 10, 1),
+                    xticklabels=[str(i) for i in range(10)],
+                )
+
+        plt.subplots_adjust(wspace=0.1)
+        plt.show()
+
+    def _compute_batch_results(self, batch, model: wave.WaveNet, dev: torch.device):
+        series, meta = batch
+        imgs = series["x"].to(dev)
+        targets = torch.tensor([m["digit"] for m in meta]).to(dev)
+
+        log_pxys = compute_log_pxy(imgs, model)
+        log_px = torch.logsumexp(log_pxys, -1)
+        py_x = torch.exp(log_pxys - log_px.unsqueeze(-1))
+        return py_x, targets
+
+    @staticmethod
+    def add_arguments_to_parser(outer_parser):
+        parser = jsonargparse.ArgumentParser()
+        parser.add_class_arguments(ClassificationCommand, None)
+        outer_parser.add_subcommand("classify", parser)
 
 
 @torch.no_grad()
@@ -233,6 +319,7 @@ def main():
     SampleDigitsCommand.add_arguments_to_parser(subcommands)
     InfillDigitsCommand.add_arguments_to_parser(subcommands)
     DensityEstimationCommand.add_arguments_to_parser(subcommands)
+    ClassificationCommand.add_arguments_to_parser(subcommands)
     config = parser.parse_args()
 
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -243,6 +330,8 @@ def main():
         cmd = InfillDigitsCommand(**(config.infill.as_dict()))
     elif config.subcommand == "density":
         cmd = DensityEstimationCommand(**(config.density.as_dict()))
+    elif config.subcommand == "classify":
+        cmd = ClassificationCommand(**(config.classify.as_dict()))
 
     cmd.run(dev)
 
@@ -251,4 +340,9 @@ if __name__ == "__main__":
     # python -m autoregressive.scripts.mnist sample --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
 
     # python -m autoregressive.scripts.mnist infill --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
+
+    # python -m autoregressive.scripts.mnist density --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
+
+    # python -m autoregressive.scripts.mnist classify --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
+
     main()

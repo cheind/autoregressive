@@ -176,7 +176,6 @@ class WaveNet(pl.LightningModule):
         quantization_levels: int = 2 ** 8,
         wave_dilations: list[int] = [2 ** i for i in range(8)] * 2,
         wave_kernel_size: int = 2,
-        extra_in_channels: int = 0,
         residual_channels: int = 32,
         dilation_channels: int = 32,
         skip_channels: int = 32,
@@ -187,7 +186,7 @@ class WaveNet(pl.LightningModule):
         train_opts: WaveNetTrainOpts = WaveNetTrainOpts(),
     ):
         super().__init__()
-        in_channels = quantization_levels + extra_in_channels
+        in_channels = quantization_levels
         layers = [
             WaveNetLayer(
                 kernel_size=input_kernel_size,

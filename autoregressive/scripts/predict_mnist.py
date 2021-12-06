@@ -10,19 +10,27 @@ from .. import datasets, generators, sampling, wave
 
 
 class SampleDigitsCommand:
+    """Samples from the condition distribution p(x|digit) where x is an mnist image."""
+
     def __init__(
         self,
         ckpt: str,
         num_samples_per_digit: int = 10,
         img_shape: str = "28x28",
     ) -> None:
+        """
+        Args:
+            ckpt: Path to model parameters
+            num_samples_per_digit: number of images per digit category to generate
+            img_shape: WxH shape of images to generate
+        """
         self.num_samples_per_digit = num_samples_per_digit
         self.img_shape = list(map(int, img_shape.split("x")))
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     @torch.no_grad()
     def run(self, dev: torch.device):
-        model = self.model.to(dev).eval()
+        model: wave.WaveNet = self.model.to(dev).eval()
         seeds = torch.zeros(
             (10, self.num_samples_per_digit), dtype=torch.long, device=dev
         ).view(-1, 1)
@@ -41,12 +49,14 @@ class SampleDigitsCommand:
         digits = torch.cat((seeds, digits), 1).view(
             -1, 1, self.img_shape[0], self.img_shape[1]
         )  # (B,C,H,W)
-        grid = make_grid(digits, nrow=10)
+        grid = make_grid(
+            digits, nrow=10, value_range=[0, model.quantization_levels - 1]
+        )
 
         fig = plt.figure(figsize=(8, 8), frameon=False)
         ax = plt.Axes(fig, [0.0, 0.0, 1.0, 1.0])
         fig.add_axes(ax)
-        ax.imshow(grid.cpu().float().permute(1, 2, 0)[..., 0], cmap="viridis")
+        ax.imshow(grid.cpu().float().permute(1, 2, 0)[..., 0], cmap="gray")
         ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
         fig.savefig("tmp/sample_digits.png", bbox_inches="tight")
         plt.show()
@@ -59,6 +69,8 @@ class SampleDigitsCommand:
 
 
 class InfillDigitsCommand:
+    """Reconstructs partial MNIST images."""
+
     def __init__(
         self,
         ckpt: str,
@@ -66,6 +78,13 @@ class InfillDigitsCommand:
         num_images: int = 25,
         num_pix_observed: int = 392,
     ) -> None:
+        """
+        Args:
+            ckpt: Path to model parameters
+            config: Path to config.yaml to read datamodule configuration from
+            num_images: Number of images to generate
+            num_pix_observed: Number of pixels (scanline order) of input image to be considered observed by the network
+        """
         self.num_images = num_images
         self.num_pix_observed = num_pix_observed
         with open(config, "r") as f:
@@ -113,9 +132,9 @@ class InfillDigitsCommand:
 
         fig = plt.figure(figsize=(8, 8), frameon=False)
         axs = (plt.subplot(121), plt.subplot(122))
-        axs[0].imshow(gridorig.cpu().float().permute(1, 2, 0)[..., 0], cmap="viridis")
+        axs[0].imshow(gridorig.cpu().float().permute(1, 2, 0)[..., 0], cmap="gray")
         axs[0].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-        axs[1].imshow(grid.cpu().float().permute(1, 2, 0)[..., 0], cmap="viridis")
+        axs[1].imshow(grid.cpu().float().permute(1, 2, 0)[..., 0], cmap="gray")
         axs[1].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
         fig.savefig("tmp/infill_digits.png", bbox_inches="tight")
         plt.show()

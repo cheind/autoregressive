@@ -53,10 +53,11 @@ class SampleDigitsCommand:
             digits, nrow=10, value_range=[0, model.quantization_levels - 1]
         )
 
+        cmap = None  # "gray_r"
         fig = plt.figure(figsize=(8, 8), frameon=False)
         ax = plt.Axes(fig, [0.0, 0.0, 1.0, 1.0])
         fig.add_axes(ax)
-        ax.imshow(grid.cpu().float().permute(1, 2, 0)[..., 0])
+        ax.imshow(grid.cpu().float().permute(1, 2, 0)[..., 0], cmap=cmap)
         ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
         fig.savefig("tmp/sample_digits.png", bbox_inches="tight")
         plt.show()

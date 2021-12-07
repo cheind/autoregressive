@@ -329,15 +329,6 @@ class WaveNet(pl.LightningModule):
             # until we figure out how to implement local conditioning nicely
             # in functional generators and rolling origin.
             cond = series["c"].float()
-            if cond.shape[-1] == series["x"].shape[-1]:
-                # local conditioning - cut to same length as inputs
-                cond = cond[..., :-1]
-                # # As a test we add cond directly to input
-                # inputs = encoding.one_hotf(
-                #     inputs, quantization_levels=self.quantization_levels
-                # )
-                # inputs = torch.cat((inputs, cond), 1)
-                # cond = None
 
         if horizon == 1:
             logits, _ = self.forward(inputs, c=cond)  # supports local cond as well

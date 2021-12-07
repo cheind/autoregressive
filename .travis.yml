@@ -9,5 +9,6 @@ script:
 - pytest
 notifications:
   email:
+    if: branch = main
     on_success: never
     on_failure: never

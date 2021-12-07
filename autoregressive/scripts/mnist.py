@@ -1,3 +1,4 @@
+from typing import Any
 import jsonargparse
 import matplotlib.pyplot as plt
 import torch
@@ -330,6 +331,18 @@ class ClassificationCommand:
 
 @torch.no_grad()
 def main():
+
+    # parser = jsonargparse.ArgumentParser()
+    # parser.add_argument("--model", type=dict)  # to ignore model
+    # parser.add_argument("--trainer", type=dict)  # to ignore model
+    # parser.add_argument("--data", type=datasets.MNISTDataModule)
+    # parser.add_argument("--config", action=jsonargparse.ActionConfigFile)
+    # parser.add_argument("--seed_everything", type=Any)
+
+    # config = parser.parse_args()
+    # config_init = parser.instantiate_classes(config)
+    # print(config_init)
+
     parser = jsonargparse.ArgumentParser("WaveNet on MNIST")
     subcommands = parser.add_subcommands()
     SampleDigitsCommand.add_arguments_to_parser(subcommands)
@@ -337,8 +350,6 @@ def main():
     DensityEstimationCommand.add_arguments_to_parser(subcommands)
     ClassificationCommand.add_arguments_to_parser(subcommands)
     config = parser.parse_args()
-
-    dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     if config.subcommand == "sample":
         cmd = SampleDigitsCommand(**(config.sample.as_dict()))
@@ -349,6 +360,7 @@ def main():
     elif config.subcommand == "classify":
         cmd = ClassificationCommand(**(config.classify.as_dict()))
 
+    dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     cmd.run(dev)
 
 

@@ -15,7 +15,7 @@ Extended functions show how to generate MNIST images or how the MNIST digit clas
  <img src="etc/presentation/progressive_classify_mnist_b000_h757.gif" width="40%">
 </div>
 
-Note, this does not implement (Gated) PixelCNNs, but unrolls images for the purpose of processing in the WaveNet.
+Note, this library does not implement (Gated) PixelCNNs, but unrolls images for the purpose of processing in the WaveNet.
 
 ## Features
 Currently the following features are implemented

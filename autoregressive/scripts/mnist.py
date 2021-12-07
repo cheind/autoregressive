@@ -2,6 +2,7 @@ from typing import Any
 import jsonargparse
 import matplotlib.pyplot as plt
 import torch
+from torch._C import dtype
 import torch.nn.functional as F
 import torch.utils.data
 import yaml
@@ -30,7 +31,9 @@ def load_images_targets(data: datasets.MNISTDataModule, n: int, seed: int = None
 
 
 @torch.no_grad()
-def compute_log_pxy(imgs: torch.Tensor, model: wave.WaveNet):
+def compute_log_pxy(
+    imgs: torch.Tensor, model: wave.WaveNet, horizon: int = None, tau: float = 1.0
+):
     """Computes p(X=x|Y) for each possible value of y as a BxQ tensor"""
     # log p(X=x) = log sum_y p(X=x|Y=y)p(Y=y)
     #            = log sum_y exp(log p(X=x|Y=y)p(Y=y))
@@ -41,6 +44,8 @@ def compute_log_pxy(imgs: torch.Tensor, model: wave.WaveNet):
     Y = model.conditioning_channels
     Q = model.quantization_levels
     B, T = imgs.shape
+    horizon = horizon or (T - 1)
+    horizon = min(horizon, (T - 1))
     log_py = torch.log(torch.tensor(1.0 / 10))
 
     y_conds = (
@@ -53,7 +58,7 @@ def compute_log_pxy(imgs: torch.Tensor, model: wave.WaveNet):
     log_pxys = []
     for y in range(10):
         logits, _ = model.forward(x=imgs, c=y_conds[y : y + 1])  # (B,Q,T)
-        log_px_y = F.log_softmax(logits, 1)
+        log_px_y = F.log_softmax(logits / tau, 1)
         log_px_y = log_px_y[
             ..., :-1
         ]  # TODO document what's happening here: predictions vs input
@@ -61,7 +66,7 @@ def compute_log_pxy(imgs: torch.Tensor, model: wave.WaveNet):
         log_px_y = log_px_y[torch.arange(B * (T - 1)), imgs[:, 1:].reshape(-1)].view(
             B, (T - 1)
         )  # (B,T)
-        log_pxy = log_px_y.sum(-1) + log_py
+        log_pxy = log_px_y[:, :horizon].sum(-1) + log_py
         log_pxys.append(log_pxy)
         del logits
     return torch.stack(log_pxys, -1)
@@ -236,7 +241,7 @@ class DensityEstimationCommand:
 
 
 class ClassificationCommand:
-    """Estimates marginal log p(Y=y|X=x), assuming p(Y=y)=1/|Y|"""
+    """Estimates p(Y=y|X=x)"""
 
     def __init__(
         self,
@@ -329,6 +334,71 @@ class ClassificationCommand:
         outer_parser.add_subcommand("classify", parser)
 
 
+class ProgressiveClassificationCommand:
+    """Estimates p(Y=y|X=x) progressively, by observing more pixels in each iteration."""
+
+    def __init__(
+        self,
+        ckpt: str,
+        config: str,
+    ) -> None:
+        """
+        Args:
+            ckpt: Path to model parameters
+            config: Path to config.yaml to read datamodule configuration from
+            num_images: Number of images to generate
+        """
+        with open(config, "r") as f:
+            plcfg = yaml.safe_load(f.read())
+        self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
+        self.data.batch_size = 5
+        self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
+
+    @torch.no_grad()
+    def run(self, dev: torch.device):
+        model = self.model.to(dev)
+        dl = self.data.test_dataloader()
+
+        for batchidx, batch in enumerate(dl):
+            for h in range(1, 28 * 28 - 1, 28):
+                series, meta = batch
+                imgs = series["x"].to(dev)
+                log_pxys = compute_log_pxy(imgs, model, horizon=h, tau=1.0)
+                log_px = torch.logsumexp(log_pxys, -1)
+                py_x = torch.exp(log_pxys - log_px.unsqueeze(-1))
+                self.plot_hist(batch, batchidx, py_x, h)
+            print("generated", batchidx)
+
+    def plot_hist(self, batch, batchidx, py_x: torch.Tensor, horizon: int):
+        imgs = batch[0]["x"]
+        B = imgs.shape[0]
+        fig, axs = plt.subplots(B, 2, sharey="col", figsize=(3, 4))
+        mask = torch.zeros((28, 28, 4), dtype=torch.uint8).view(-1, 4)
+        mask[horizon:, 3] = 255
+
+        for i in range(B):
+            axs[i, 0].imshow(imgs[i].view(28, 28))
+            axs[i, 0].imshow(mask.view(28, 28, 4))
+            axs[i, 1].bar(torch.arange(0, 10, 1).float(), py_x[i].cpu(), width=0.9)
+            axs[i, 0].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+            axs[i, 1].set_ylim(0, 1)
+            axs[i, 1].set(
+                xticks=torch.arange(0, 10, 1),
+                xticklabels=[str(i) for i in range(10)],
+            )
+        axs[0, 0].set_title("Input")
+        axs[0, 1].set_title("Prediction")
+        plt.tight_layout()
+        fig.savefig(f"tmp/progressive_classify_mnist_b{batchidx:03}_h{horizon:03}.png")
+        plt.close(fig)
+
+    @staticmethod
+    def add_arguments_to_parser(outer_parser):
+        parser = jsonargparse.ArgumentParser()
+        parser.add_class_arguments(ProgressiveClassificationCommand, None)
+        outer_parser.add_subcommand("progressive", parser)
+
+
 @torch.no_grad()
 def main():
 
@@ -349,6 +419,7 @@ def main():
     InfillDigitsCommand.add_arguments_to_parser(subcommands)
     DensityEstimationCommand.add_arguments_to_parser(subcommands)
     ClassificationCommand.add_arguments_to_parser(subcommands)
+    ProgressiveClassificationCommand.add_arguments_to_parser(subcommands)
     config = parser.parse_args()
 
     if config.subcommand == "sample":
@@ -359,6 +430,8 @@ def main():
         cmd = DensityEstimationCommand(**(config.density.as_dict()))
     elif config.subcommand == "classify":
         cmd = ClassificationCommand(**(config.classify.as_dict()))
+    elif config.subcommand == "progressive":
+        cmd = ProgressiveClassificationCommand(**(config.progressive.as_dict()))
 
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     cmd.run(dev)

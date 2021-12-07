@@ -282,7 +282,7 @@ class ClassificationCommand:
         all_probs = torch.cat(all_probs, 0)
 
         print(
-            f"avg. accuracy {(all_preds==all_targets).sum()/all_targets.shape[0]:.2f}"
+            f"avg. accuracy {(all_preds==all_targets).sum()/all_targets.shape[0]:.4f}"
         )
         np.savez(
             "tmp/classify.npz",

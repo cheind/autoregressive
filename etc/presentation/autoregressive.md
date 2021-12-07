@@ -78,11 +78,15 @@ then a generative model estimates
 $$
 p(\mathbf{X}).
 $$
-Given the joint distribution, we can generate *new* data via sampling 
-$$
-\mathbf{x} \sim p(\mathbf{X}).
-$$
-In contrast, a discriminative models models conditional distributions, e.g. $p(X_3 \mid X_2,X_1)$.
+--- 
+
+# Generative Model Applications
+Given the joint distribution, we can carry out a number of tasks using our model
+1. Generate novel data: $\mathbf{x} \sim p(\mathbf{X})$
+1. Estimate density of observations: $p(\mathbf{X}=\mathbf{x})$
+1. Perform conditional inference: $p(X_3|X_2=x_2, X_1=x_1)$
+
+In the experiments below we will also see how to use conditioning to perform MNIST classification.
 
 ---
 
@@ -392,7 +396,7 @@ The plot to the left shows default (blue) and fast (orange) sample generation* u
 # 2D Image Setup
 
 We use the MNIST dataset, which consists of images taken from 10 digit classes (0..9). 
-Sampling: 28x28pixels, quantization: 256 bins, encoding one-hot.
+Sampling: 28x28pixels, quantization: 256 bins / 2 bins, encoding one-hot.
 Train/Val/Test splits as suggested.
 
 ![center w:600](mnist-example.png)
@@ -400,7 +404,7 @@ Train/Val/Test splits as suggested.
 ---
 ![bg fit right:40%](wavenet-sample-q256.png)
 # MNIST Sampling Results
-Samples drawn from $p(\mathbf{X}=\mathbf{x} \mid Y=y)$, where $\mathbf{x}$ is an MNIST 28x28 image and $y$ is the digit.
+Samples drawn from $p(\mathbf{X}\mid Y)$, where $\mathbf{X}$ is an MNIST 28x28 random variable and $Y$ is the digit conditioned on. Quantization 256.
 
 Note
 - Almost all generated images contain human recognizable digits of the given target class.
@@ -415,7 +419,7 @@ Side note on Z-filling curves
 
 MNIST image reconstructions drawn from 
 $$
-p(X_{N+1},\ldots,X_{T} \mid X_1,\ldots,X_{N},Y=y),
+p(X_{N+1},\ldots,X_{T} \mid X_1,\ldots,X_{N},Y),
 $$
 where $X_i$ denotes a random variable corresponding to the i-th (unrolled) MNIST 28x28 image pixel value and $y$ is the digit class. 
 
@@ -426,17 +430,38 @@ Note
 - Fading effect to soften hard edges is captured by the model
 
 
+---
+# MNIST Density Estimation Results
+Assuming we know the class probabilities $p(Y)=\frac{1}{|Y|}$, we can compute the marginal image probability as follows
+$$
+p(\mathbf{X}=\mathbf{x}) = \sum_{y_i=1}^Y p(\mathbf{X}=\mathbf{x}|Y=y_i)p(Y=y_i).
+$$
+For computational reasons, we instead compute in the library
+$$
+\log p(\mathbf{X}=\mathbf{x}) = \log \sum_{y_i=1}^Y \exp\left[\log p(\mathbf{X}=\mathbf{x}|Y=y_i)p(Y=y_i)\right].
+$$
+For MNIST images the average $\log p(\mathbf{X}=\mathbf{x})$ is -60.7, whereas random images range around -1300.0.
 
+---
+![bg fit right:35%](wavenet-classification.svg)
+# MNIST Classification Results
+Given the class probabilities $p(Y)$, we compute from Bayes
+$$
+p(Y|\mathbf{X}=\mathbf{x}) = \frac{p(\mathbf{X}=\mathbf{x}|Y)p(Y)}{p(\mathbf{X}=\mathbf{x})}.
+$$
+A sample classification is shown on the right. 
 
+## Accuracy
+The 256 quantized model achieves an accuracy of 94% on MNIST test, while the binarized model yields a 98.7% accuracy score.
 
+---
+# MNIST Progressive Classification Results
+In this scenario, we consider pixels to become available incrementally over time and observe how $p(Y|\mathbf{X}_{0...H})$ evolves as $H$ approaches $T$=784. The image below plots (from left to right) $p(Y|\mathbf{X}_{0...H})$ for $H$=85, $H$=281 and $H$=589.
+![center fit](wavenet-progressive-split.png)
 
-
-
-
-
-
-
-
+<!-- 
+_footer: 'See https://media.giphy.com/media/TsM2qbgxGwi3QPrIkk/giphy.gif for an animated version'
+ -->
 
 
 

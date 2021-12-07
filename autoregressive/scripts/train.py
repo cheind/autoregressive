@@ -43,7 +43,7 @@ def cli_main():
         mode="max",
         check_on_train_epoch_end=True,
         min_delta=1e-3,
-        patience=3,
+        patience=5,
         verbose=False,
     )
 
@@ -56,7 +56,7 @@ def cli_main():
         # run=False,
         save_config_overwrite=True,
         trainer_defaults={
-            "callbacks": [ckpt, lrm],
+            "callbacks": [ckpt, lrm, es],
             "max_epochs": 30,
             "gpus": 1,
             "log_every_n_steps": 25,

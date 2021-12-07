@@ -33,7 +33,11 @@ A detailed presentation with theoretical background, architectural consideration
  <a href="etc/presentation/autoregressive_presentation.pdf"><img src="etc/presentation/title.PNG" width="60%"></a>
 </div>
 
-The presentation source as well as all generated images are public domain. In case you find it useful, please leave a citation (see References below). All presentation sources can be found in `etc/presentation`. The process is written in markdown using [Marp](https://marp.app/), graph diagrams are created using [yEd](https://www.yworks.com/products/yed).
+*If you spot errors or if case you have suggestions for improvements, please let me know by opening an issue.*
+
+The presentation source as well as all generated images are public domain. In case you find them useful, please leave a citation (see References below). All presentation sources can be found in `etc/presentation`. The process is written in markdown using [Marp](https://marp.app/), graph diagrams are created using [yEd](https://www.yworks.com/products/yed).
+
+
 
 
 ## References

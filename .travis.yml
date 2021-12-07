@@ -4,7 +4,7 @@ python:
 cache:
   pip: true
 install:
-- pip install git+https://github.com/cheind/autoregressive.git#egg=gcsl[dev]
+- pip install git+https://github.com/cheind/autoregressive.git#egg=autoregressive[dev]
 script:
 - pytest
 notifications:

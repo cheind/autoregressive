@@ -446,4 +446,6 @@ if __name__ == "__main__":
 
     # python -m autoregressive.scripts.mnist classify --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt" --show_hist=True
 
+    # python -m autoregressive.scripts.mnist progressive --config v56\config.yaml --ckpt "v56\checkpoints\wavenet-epoch=06-val_acc_epoch=0.9705.ckpt"
+
     main()

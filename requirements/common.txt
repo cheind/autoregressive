@@ -1,4 +1,5 @@
 torch
+torchvision
 pytorch_lightning
 jsonargparse[signatures]
 numpy

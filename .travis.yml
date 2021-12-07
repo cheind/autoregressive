@@ -1,0 +1,13 @@
+language: python
+python:
+- 3.9
+cache:
+  pip: true
+install:
+- pip install git+https://github.com/cheind/autoregressive.git#egg=gcsl[dev]
+script:
+- pytest
+notifications:
+  email:
+    on_success: never
+    on_failure: never

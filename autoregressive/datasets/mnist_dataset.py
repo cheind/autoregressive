@@ -61,7 +61,6 @@ class MNISTDataModule(pl.LightningDataModule):
         batch_size: int = 64,
         num_workers: int = 0,
         digit_conditioning: bool = False,
-        posenc_conditioning: bool = False,
         seed: int = None,
     ):
         super().__init__()
@@ -74,11 +73,6 @@ class MNISTDataModule(pl.LightningDataModule):
         if digit_conditioning:
             _logger.info("Added digit conditioning: 10 condition channels required")
             transform = add_digit_conditioning
-        elif posenc_conditioning:
-            _logger.info(
-                f"Added positional conditioning: {POSENC.shape[0]} condition channels required"
-            )
-            transform = add_pos_conditioning
         else:
             transform = None
 

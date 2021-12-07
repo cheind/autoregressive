@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.data
 import yaml
+import numpy as np
 from torchvision.utils import make_grid
 
 from .. import datasets, generators, sampling, wave
@@ -52,8 +53,6 @@ def compute_log_pxy(imgs: torch.Tensor, model: wave.WaveNet):
     for y in range(10):
         logits, _ = model.forward(x=imgs, c=y_conds[y : y + 1])  # (B,Q,T)
         log_px_y = F.log_softmax(logits, 1)
-        # plt.imshow(torch.exp(log_px_y)[0, 0, :].cpu().view(28, 28))
-        # plt.show()
         log_px_y = log_px_y[
             ..., :-1
         ]  # TODO document what's happening here: predictions vs input
@@ -215,6 +214,7 @@ class DensityEstimationCommand:
     @torch.no_grad()
     def run(self, dev: torch.device):
         model = self.model.to(dev)
+        Q = self.model.quantization_levels
 
         imgs, _ = load_images_targets(self.data, self.num_images)
         imgs = torch.stack(imgs, 0).to(dev)
@@ -222,10 +222,10 @@ class DensityEstimationCommand:
         log_px = torch.logsumexp(log_pxys, -1)
         print("log p(x) x~p(MNIST)", log_px)
 
-        imgs_rand = torch.randint(0, 256, (5, 784)).to(dev)
+        imgs_rand = torch.randint(0, Q, (5, 784)).to(dev)
         log_pxys = compute_log_pxy(imgs_rand, model)
         log_px = torch.logsumexp(log_pxys, -1)
-        print("log p(x) x~U(0,255)", log_px)
+        print(f"log p(x) x~U(0,{Q})", log_px)
 
     @staticmethod
     def add_arguments_to_parser(outer_parser):
@@ -241,6 +241,7 @@ class ClassificationCommand:
         self,
         ckpt: str,
         config: str,
+        hist_on_error: bool = False,
         show_hist: bool = False,
     ) -> None:
         """
@@ -254,38 +255,43 @@ class ClassificationCommand:
         self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
         self.data.batch_size = 5
         self.show_hist = show_hist
+        self.hist_on_error = hist_on_error
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     @torch.no_grad()
     def run(self, dev: torch.device):
         model = self.model.to(dev)
         dl = self.data.test_dataloader()
-        acc_sum = 0
-        num_images = 0
+
+        all_preds = []
+        all_targets = []
+        all_probs = []
         for batchidx, batch in enumerate(dl):
             py_x, targets = self._compute_batch_results(batch, model, dev)
-            if self.show_hist:
-                self.plot_hist(batchidx, batch, py_x)
-            num_images += py_x.shape[0]
-            acc_sum += (py_x.argmax(1) == targets).sum()
+            acc = (py_x.argmax(1) == targets).sum()
+            if (self.hist_on_error and acc != py_x.shape[0]) or self.show_hist:
+                self.plot_hist(batchidx, batch, py_x, show=self.show_hist)
+            all_probs.append(py_x)
+            all_preds.append(py_x.argmax(1))
+            all_targets.append(targets)
             if batchidx % 50 == 0:
                 print(f"batch {batchidx}/{len(dl)}")
 
-        print(f"avg. accuracy {acc_sum/num_images:.2f}")
+        all_preds = torch.cat(all_preds)
+        all_targets = torch.cat(all_targets)
+        all_probs = torch.cat(all_probs, 0)
 
-        # model = self.model.to(dev)
+        print(
+            f"avg. accuracy {(all_preds==all_targets).sum()/all_targets.shape[0]:.2f}"
+        )
+        np.savez(
+            "tmp/classify.npz",
+            preds=all_preds.cpu().numpy(),
+            targets=all_targets.cpu().numpy(),
+            probs=all_probs.cpu().numpy(),
+        )
 
-        # dl = self.data.train_dataloader()
-
-        # series, meta = next(iter(dl))
-        # imgs = series["x"].to(dev)
-        # targets = torch.tensor([m["digit"] for m in meta]).to(dev)
-
-        # log_pxys = compute_log_pxy(imgs, model)
-        # log_px = torch.logsumexp(log_pxys, -1)
-        # py_x = torch.exp(log_pxys - log_px.unsqueeze(-1))
-
-    def plot_hist(self, batch_idx, batch, py_x: torch.Tensor):
+    def plot_hist(self, batch_idx, batch, py_x: torch.Tensor, show: bool):
         N = self.data.batch_size
         imgs = batch[0]["x"]
         fig, axs = plt.subplots(N, 2, sharex="col", sharey="col", figsize=(3, 4))
@@ -302,7 +308,8 @@ class ClassificationCommand:
         axs[0, 1].set_title("Prediction")
         plt.tight_layout()
         fig.savefig(f"tmp/classify_mnist_{batch_idx:03}.svg")
-        plt.show()
+        if show:
+            plt.show()
 
     def _compute_batch_results(self, batch, model: wave.WaveNet, dev: torch.device):
         series, meta = batch

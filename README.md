@@ -48,6 +48,10 @@ which requires Python 3.9 and a recent PyTorch > 1.9
 ## Usage
 The library comes with a set of [pre-trained models](models/) that can be used as follows
 ### 1D Fourier
+To generate from known observations
+```bash
+python -m autoregressive.scripts.forecast --config "models/fseries/config.yaml" "models/fseries/xxxxxx.ckpt"
+```
 ### 2D MNIST
 To sample from the class-conditional model
 ```bash

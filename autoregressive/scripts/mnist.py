@@ -241,7 +241,7 @@ class ClassificationCommand:
         self,
         ckpt: str,
         config: str,
-        num_images: int = 5,
+        show_hist: bool = False,
     ) -> None:
         """
         Args:
@@ -249,16 +249,30 @@ class ClassificationCommand:
             config: Path to config.yaml to read datamodule configuration from
             num_images: Number of images to generate
         """
-        self.num_images = num_images
         with open(config, "r") as f:
             plcfg = yaml.safe_load(f.read())
         self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
-        self.data.batch_size = 10
+        self.data.batch_size = 5
+        self.show_hist = show_hist
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     @torch.no_grad()
     def run(self, dev: torch.device):
-        self.plot_hist(dev)
+        model = self.model.to(dev)
+        dl = self.data.test_dataloader()
+        acc_sum = 0
+        num_images = 0
+        for batchidx, batch in enumerate(dl):
+            py_x, targets = self._compute_batch_results(batch, model, dev)
+            if self.show_hist:
+                self.plot_hist(batchidx, batch, py_x)
+            num_images += py_x.shape[0]
+            acc_sum += (py_x.argmax(1) == targets).sum()
+            if batchidx % 50 == 0:
+                print(f"batch {batchidx}/{len(dl)}")
+
+        print(f"avg. accuracy {acc_sum/num_images:.2f}")
+
         # model = self.model.to(dev)
 
         # dl = self.data.train_dataloader()
@@ -271,28 +285,23 @@ class ClassificationCommand:
         # log_px = torch.logsumexp(log_pxys, -1)
         # py_x = torch.exp(log_pxys - log_px.unsqueeze(-1))
 
-    def plot_hist(self, dev: torch.device):
-        model = self.model.to(dev)
-
-        dl = self.data.test_dataloader()
-
-        batch = next(iter(dl))
+    def plot_hist(self, batch_idx, batch, py_x: torch.Tensor):
+        N = self.data.batch_size
         imgs = batch[0]["x"]
-        py_x, targets = self._compute_batch_results(batch, model, dev)
-        fig, axs = plt.subplots(self.data.batch_size, 2, sharex="col", sharey="col")
-        for i in range(self.data.batch_size):
+        fig, axs = plt.subplots(N, 2, sharex="col", sharey="col", figsize=(3, 4))
+        for i in range(N):
             axs[i, 0].imshow(imgs[i].view(28, 28))
-            axs[i, 1].bar(torch.arange(0, 10, 1).float(), py_x[i].cpu())
+            axs[i, 1].bar(torch.arange(0, 10, 1).float(), py_x[i].cpu(), width=0.9)
             axs[i, 0].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-            if i < self.data.batch_size - 1:
-                axs[i, 1].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-            else:
-                axs[i, 1].set(
-                    xticks=torch.arange(0, 10, 1),
-                    xticklabels=[str(i) for i in range(10)],
-                )
-
-        plt.subplots_adjust(wspace=0.1)
+            axs[i, 1].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+        axs[N - 1, 1].set(
+            xticks=torch.arange(0, 10, 1),
+            xticklabels=[str(i) for i in range(10)],
+        )
+        axs[0, 0].set_title("Input")
+        axs[0, 1].set_title("Prediction")
+        plt.tight_layout()
+        fig.savefig(f"tmp/classify_mnist_{batch_idx:03}.svg")
         plt.show()
 
     def _compute_batch_results(self, batch, model: wave.WaveNet, dev: torch.device):
@@ -343,6 +352,6 @@ if __name__ == "__main__":
 
     # python -m autoregressive.scripts.mnist density --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
 
-    # python -m autoregressive.scripts.mnist classify --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
+    # python -m autoregressive.scripts.mnist classify --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt" --show_hist=True
 
     main()

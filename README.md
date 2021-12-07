@@ -46,9 +46,25 @@ pip install https://github.com/cheind/autoregressive.git#egg=autoregressive[dev]
 which requires Python 3.9 and a recent PyTorch > 1.9
 
 ## Usage
-TODO
+The library comes with a set of [pre-trained models](models/) that can be used as follows
 ### 1D Fourier
 ### 2D MNIST
+To sample from the class-conditional model
+```bash
+python -m autoregressive.scripts.mnist sample --ckpt "models/mnist_q2/xxxxxx.ckpt"
+```
+
+To reconstruct image parts
+```bash
+python -m autoregressive.scripts.mnist infill --ckpt "models/mnist_q2/xxxxxx.ckpt" --config "models/mnist_q2/config.yaml"
+```
+
+To perform classification
+```bash
+python -m autoregressive.scripts.mnist classify --ckpt "models/mnist_q2/xxxxxx.ckpt" --config "models/mnist_q2/config.yaml" --show_hist true
+```
+
+Many commands come with parameters, use `--help` to get additional help.
 
 
 ## References

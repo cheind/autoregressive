@@ -37,7 +37,18 @@ A detailed presentation with theoretical background, architectural consideration
 
 The presentation source as well as all generated images are public domain. In case you find them useful, please leave a citation (see References below). All presentation sources can be found in `etc/presentation`. The process is written in markdown using [Marp](https://marp.app/), graph diagrams are created using [yEd](https://www.yworks.com/products/yed).
 
+## Installation
+To install run,
 
+```
+pip install https://github.com/cheind/autoregressive.git#egg=autoregressive[dev]
+```
+which requires Python 3.9 and a recent PyTorch > 1.9
+
+## Usage
+TODO
+### 1D Fourier
+### 2D MNIST
 
 
 ## References

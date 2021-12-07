@@ -364,7 +364,7 @@ class WaveNet(pl.LightningModule):
         self.log("val_acc_epoch", avg_acc, prog_bar=True)
 
     def _log_training_details(self, batch_idx: int):
-        if batch_idx % 100 != 0:
+        if batch_idx % 1000 != 0:
             return
 
         histogram_inputs = []

@@ -46,7 +46,9 @@ pip install https://github.com/cheind/autoregressive.git#egg=autoregressive[dev]
 which requires Python 3.9 and a recent PyTorch > 1.9
 
 ## Usage
-The library comes with a set of pre-trained models in `models/`. The following commands use those models to make various predictions. Many commands come with additional parameters, use `--help` to get additional help.
+The library comes with a set of pre-trained models in [`models/`](models/). The following commands use those models to make various predictions. 
+
+Many listed commands come with additional parameters; use `--help` to get additional information.
 
 ### 1D Fourier
 

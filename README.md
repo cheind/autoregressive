@@ -55,20 +55,20 @@ python -m autoregressive.scripts.forecast --config "models/fseries/config.yaml" 
 ### 2D MNIST
 To sample from the class-conditional model
 ```bash
-python -m autoregressive.scripts.mnist sample --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
+python -m autoregressive.scripts.wavenet_mnist sample --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
 ```
 
 To reconstruct image parts
 ```bash
-python -m autoregressive.scripts.mnist infill --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt" 
+python -m autoregressive.scripts.wavenet_mnist infill --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt" 
 ```
 
 To perform classification
 ```bash
-python -m autoregressive.scripts.mnist classify --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
+python -m autoregressive.scripts.wavenet_mnist classify --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
 ```
 
-Many commands come with parameters, use `--help` to get additional help.
+Many commands come with additional parameters, use `--help` to get additional help.
 
 
 ## References

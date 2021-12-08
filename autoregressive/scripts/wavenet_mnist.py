@@ -10,6 +10,7 @@ import abc
 from torchvision.utils import make_grid
 
 from .. import datasets, generators, sampling, wave
+from .wavenet_mnist import BaseCommand
 
 
 def load_images_targets(data: datasets.MNISTDataModule, n: int, seed: int = None):
@@ -28,34 +29,6 @@ def load_images_targets(data: datasets.MNISTDataModule, n: int, seed: int = None
         targets.append(sm[1]["digit"])
 
     return imgs, targets
-
-
-class BaseCommand(abc.ABC):
-    @classmethod
-    def get_arguments(cls):
-        parser = jsonargparse.ArgumentParser()
-        parser.add_class_arguments(cls, None)
-        cls._add_config_arg(parser)
-        return parser
-
-    @abc.abstractmethod
-    def run():
-        ...
-
-    @property
-    def default_device(self):
-        dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        return dev
-
-    @staticmethod
-    def _add_config_arg(parser: jsonargparse.ArgumentParser):
-        # When loading from PL config file, ignore all other entries except data.
-        # See https://github.com/PyTorchLightning/pytorch-lightning/discussions/10956#discussioncomment-1765546
-        from jsonargparse import SUPPRESS
-
-        for key in ["model", "trainer", "seed_everything", "optimizer", "lr_scheduler"]:
-            parser.add_argument(f"--{key}", type=Any, help=SUPPRESS)
-        parser.add_argument("--config", action=jsonargparse.ActionConfigFile)
 
 
 @torch.no_grad()

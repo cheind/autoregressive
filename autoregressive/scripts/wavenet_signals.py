@@ -310,6 +310,9 @@ def main():
 
     # python -m autoregressive.scripts.wavenet_signals predict --config models\fseries_q127\config.yaml --ckpt "models\fseries_q127\wavenet-epoch=17-val_acc_epoch=0.9065.ckpt" --horizon 1500 --num_observed 600 --num_trajectories 20 --num_curves 1 --seed 123 --show_confidence true
 
+    # Apply to MNIST
+    # python -m autoregressive.scripts.wavenet_signals predict --config models\mnist_q256\config.yaml --ckpt "models\mnist_q256\wavenet-epoch=09-val_acc_epoch=0.8954.ckpt" --horizon 392 --num_observed 392
+
 
 if __name__ == "__main__":
     main()

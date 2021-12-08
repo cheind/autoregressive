@@ -141,7 +141,7 @@ class SampleSignalsCommand(BaseCommand):
         )
         t = torch.arange(0, horizon + 1, 1) * self.dt
         for curve in curves.cpu():
-            grid[0].step(t, curve, alpha=0.8)
+            grid[0].plot(t, curve, alpha=0.8)
         grid[0].set_ylim(0, model.quantization_levels)
         grid[0].set_xlabel("Timestep")
         grid[0].set_ylabel("Quantization Level")
@@ -305,6 +305,8 @@ def main():
     cmdname = configinit.subcommand
     cmd = command_map[cmdname](**(configinit[cmdname].as_dict()))
     cmd.run()
+
+    # python -m autoregressive.scripts.wavenet_signals sample --config models\fseries_q127\config.yaml --ckpt "models\fseries_q127\wavenet-epoch=17-val_acc_epoch=0.9065.ckpt" --condition 4 --horizon 1000
 
     # python -m autoregressive.scripts.wavenet_signals predict --config models\fseries_q127\config.yaml --ckpt "models\fseries_q127\wavenet-epoch=17-val_acc_epoch=0.9065.ckpt" --horizon 1500 --num_observed 600 --num_trajectories 20 --num_curves 1 --seed 123 --show_confidence true
 

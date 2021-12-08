@@ -12,7 +12,7 @@ Extended functions show how to generate MNIST images or how the MNIST digit clas
 
 <div align="center">
  <img src="etc/presentation/wavenet-sample-q256.png" width="40%">
- <img src="etc/presentation/progressive_classify_mnist_b000_h757.gif" width="40%">
+ <img src="etc/presentation/progressive_classify_mnist_b000_h757.gif" width="30%">
 </div>
 
 *Note, this library **does not** implement (Gated) PixelCNNs, but unrolls images for the purpose of processing in WaveNet architectures. This works surprisingly well.*

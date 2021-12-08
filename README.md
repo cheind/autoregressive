@@ -46,30 +46,42 @@ pip install https://github.com/cheind/autoregressive.git#egg=autoregressive[dev]
 which requires Python 3.9 and a recent PyTorch > 1.9
 
 ## Usage
-The library comes with a set of [pre-trained models](models/) that can be used as follows
+The library comes with a set of pre-trained models in `models/`. The following commands use those models to make various predictions. Many commands come with additional parameters, use `--help` to get additional help.
+
 ### 1D Fourier
-To generate from known observations
+
+#### Sample signals
+Samples new signals from scratch
 ```bash
-python -m autoregressive.scripts.forecast --config "models/fseries/config.yaml" "models/fseries/xxxxxx.ckpt"
+python -m autoregressive.scripts.wavenet_signals sample --config "models/fseries/config.yaml" --ckpt "models/fseries/xxxxxx.ckpt" --condition 4 --horizon 1000
 ```
+The default models conditions on the periodicity of the signal. For the pre-trained model the value range is `int: [0..4]`, corresponding to periods of 5-10secs.
+
+#### Predict signals
+Predicts the shape of partially observable curves.
+```bash
+python -m autoregressive.scripts.wavenet_signals sample --config "models/fseries/config.yaml" --ckpt "models/fseries/xxxxxx.ckpt" --horizon 1500 --num_observed 50 --num_trajectories 20 --num_curves 1 --show_confidence true
+```
+
 ### 2D MNIST
+
+#### Sample images
 To sample from the class-conditional model
 ```bash
 python -m autoregressive.scripts.wavenet_mnist sample --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
 ```
 
-To reconstruct image parts
+#### Predict images
+Generates images conditioned on the digit class and already observed pixels.
 ```bash
-python -m autoregressive.scripts.wavenet_mnist infill --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt" 
+python -m autoregressive.scripts.wavenet_mnist predict --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt" 
 ```
 
+#### Classify images
 To perform classification
 ```bash
 python -m autoregressive.scripts.wavenet_mnist classify --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
 ```
-
-Many commands come with additional parameters, use `--help` to get additional help.
-
 
 ## References
 

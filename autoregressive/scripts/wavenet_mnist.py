@@ -1,12 +1,14 @@
 from typing import Any
+
 import jsonargparse
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
-from torch._C import dtype
 import torch.nn.functional as F
 import torch.utils.data
+import pytorch_lightning as pl
 import yaml
-import numpy as np
+import abc
 from torchvision.utils import make_grid
 
 from .. import datasets, generators, sampling, wave
@@ -28,6 +30,34 @@ def load_images_targets(data: datasets.MNISTDataModule, n: int, seed: int = None
         targets.append(sm[1]["digit"])
 
     return imgs, targets
+
+
+class BaseCommand(abc.ABC):
+    @classmethod
+    def get_arguments(cls):
+        parser = jsonargparse.ArgumentParser()
+        parser.add_class_arguments(cls, None)
+        cls._add_config_arg(parser)
+        return parser
+
+    @abc.abstractmethod
+    def run():
+        ...
+
+    @property
+    def default_device(self):
+        dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        return dev
+
+    @staticmethod
+    def _add_config_arg(parser: jsonargparse.ArgumentParser):
+        # When loading from PL config file, ignore all other entries except data.
+        # See https://github.com/PyTorchLightning/pytorch-lightning/discussions/10956#discussioncomment-1765546
+        from jsonargparse import SUPPRESS
+
+        for key in ["model", "trainer", "seed_everything", "optimizer", "lr_scheduler"]:
+            parser.add_argument(f"--{key}", type=Any, help=SUPPRESS)
+        parser.add_argument("--config", action=jsonargparse.ActionConfigFile)
 
 
 @torch.no_grad()
@@ -72,27 +102,32 @@ def compute_log_pxy(
     return torch.stack(log_pxys, -1)
 
 
-class SampleDigitsCommand:
+class SampleImagesCommand(BaseCommand):
     """Samples from the condition distribution p(x|digit) where x is an mnist image."""
 
     def __init__(
         self,
         ckpt: str,
+        data: datasets.MNISTDataModule = None,
         num_samples_per_digit: int = 10,
         img_shape: str = "28x28",
+        **kwargs,
     ) -> None:
         """
         Args:
             ckpt: Path to model parameters
+            data: MNIST data module
             num_samples_per_digit: number of images per digit category to generate
             img_shape: WxH shape of images to generate
         """
+        del data
         self.num_samples_per_digit = num_samples_per_digit
         self.img_shape = list(map(int, img_shape.split("x")))
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     @torch.no_grad()
-    def run(self, dev: torch.device):
+    def run(self):
+        dev = self.default_device
         model: wave.WaveNet = self.model.to(dev).eval()
         seeds = torch.zeros(
             (10, self.num_samples_per_digit), dtype=torch.long, device=dev
@@ -125,39 +160,33 @@ class SampleDigitsCommand:
         fig.savefig("tmp/sample_digits.png", bbox_inches="tight")
         plt.show()
 
-    @staticmethod
-    def add_arguments_to_parser(outer_parser):
-        parser = jsonargparse.ArgumentParser()
-        parser.add_class_arguments(SampleDigitsCommand, None)
-        outer_parser.add_subcommand("sample", parser)
 
-
-class InfillDigitsCommand:
+class PredictImagesCommand(BaseCommand):
     """Reconstructs partial MNIST images."""
 
     def __init__(
         self,
         ckpt: str,
-        config: str,
+        data: datasets.MNISTDataModule,
         num_images: int = 25,
         num_pix_observed: int = 392,
+        **kwargs,
     ) -> None:
         """
         Args:
             ckpt: Path to model parameters
-            config: Path to config.yaml to read datamodule configuration from
+            data: MNIST data module
             num_images: Number of images to generate
             num_pix_observed: Number of pixels (scanline order) of input image to be considered observed by the network
         """
         self.num_images = num_images
         self.num_pix_observed = num_pix_observed
-        with open(config, "r") as f:
-            plcfg = yaml.safe_load(f.read())
-        self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
+        self.data = data
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     @torch.no_grad()
-    def run(self, dev: torch.device):
+    def run(self):
+        dev = self.default_device
         model = self.model.to(dev)
 
         imgs, targets = load_images_targets(self.data, self.num_images)
@@ -189,36 +218,31 @@ class InfillDigitsCommand:
         fig.savefig("tmp/infill_digits.png", bbox_inches="tight")
         plt.show()
 
-    @staticmethod
-    def add_arguments_to_parser(outer_parser):
-        parser = jsonargparse.ArgumentParser()
-        parser.add_class_arguments(InfillDigitsCommand, None)
-        outer_parser.add_subcommand("infill", parser)
 
-
-class DensityEstimationCommand:
+class DensityEstimationCommand(BaseCommand):
     """Estimates marginal log p(X=x), assuming p(Y=y)=1/|Y|"""
 
     def __init__(
         self,
         ckpt: str,
-        config: str,
+        data: datasets.MNISTDataModule,
         num_images: int = 5,
+        **kwargs,
     ) -> None:
         """
         Args:
             ckpt: Path to model parameters
-            config: Path to config.yaml to read datamodule configuration from
+            data: MNIST data module
             num_images: Number of images to generate
         """
+        del kwargs
         self.num_images = num_images
-        with open(config, "r") as f:
-            plcfg = yaml.safe_load(f.read())
-        self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
+        self.data = data
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     @torch.no_grad()
-    def run(self, dev: torch.device):
+    def run(self):
+        dev = self.default_device
         model = self.model.to(dev)
         Q = self.model.quantization_levels
 
@@ -233,22 +257,17 @@ class DensityEstimationCommand:
         log_px = torch.logsumexp(log_pxys, -1)
         print(f"log p(x) x~U(0,{Q})", log_px)
 
-    @staticmethod
-    def add_arguments_to_parser(outer_parser):
-        parser = jsonargparse.ArgumentParser()
-        parser.add_class_arguments(DensityEstimationCommand, None)
-        outer_parser.add_subcommand("density", parser)
 
-
-class ClassificationCommand:
+class ClassificationCommand(BaseCommand):
     """Estimates p(Y=y|X=x)"""
 
     def __init__(
         self,
         ckpt: str,
-        config: str,
-        hist_on_error: bool = False,
-        show_hist: bool = False,
+        data: datasets.MNISTDataModule,
+        hist_on_error: bool = True,
+        show_hist: bool = True,
+        **kwargs,
     ) -> None:
         """
         Args:
@@ -256,16 +275,15 @@ class ClassificationCommand:
             config: Path to config.yaml to read datamodule configuration from
             num_images: Number of images to generate
         """
-        with open(config, "r") as f:
-            plcfg = yaml.safe_load(f.read())
-        self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
+        self.data = data
         self.data.batch_size = 5
         self.show_hist = show_hist
         self.hist_on_error = hist_on_error
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
     @torch.no_grad()
-    def run(self, dev: torch.device):
+    def run(self):
+        dev = self.default_device
         model = self.model.to(dev)
         dl = self.data.test_dataloader()
 
@@ -327,35 +345,32 @@ class ClassificationCommand:
         py_x = torch.exp(log_pxys - log_px.unsqueeze(-1))
         return py_x, targets
 
-    @staticmethod
-    def add_arguments_to_parser(outer_parser):
-        parser = jsonargparse.ArgumentParser()
-        parser.add_class_arguments(ClassificationCommand, None)
-        outer_parser.add_subcommand("classify", parser)
 
-
-class ProgressiveClassificationCommand:
+class ProgressiveClassificationCommand(BaseCommand):
     """Estimates p(Y=y|X=x) progressively, by observing more pixels in each iteration."""
 
     def __init__(
         self,
         ckpt: str,
-        config: str,
+        data: datasets.MNISTDataModule,
+        show_hist: bool = True,
+        **kwargs,
     ) -> None:
         """
         Args:
             ckpt: Path to model parameters
-            config: Path to config.yaml to read datamodule configuration from
+            data: MNIST data module
             num_images: Number of images to generate
+            show_hist: interactive display of histogram
         """
-        with open(config, "r") as f:
-            plcfg = yaml.safe_load(f.read())
-        self.data = datasets.MNISTDataModule(**plcfg["data"]["init_args"])
+        self.data = data
         self.data.batch_size = 5
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
+        self.show_hist = show_hist
 
     @torch.no_grad()
-    def run(self, dev: torch.device):
+    def run(self):
+        dev = self.default_device
         model = self.model.to(dev)
         dl = self.data.test_dataloader()
 
@@ -390,51 +405,54 @@ class ProgressiveClassificationCommand:
         axs[0, 1].set_title("Prediction")
         plt.tight_layout()
         fig.savefig(f"tmp/progressive_classify_mnist_b{batchidx:03}_h{horizon:03}.png")
+        if self.show_hist:
+            plt.show()
         plt.close(fig)
-
-    @staticmethod
-    def add_arguments_to_parser(outer_parser):
-        parser = jsonargparse.ArgumentParser()
-        parser.add_class_arguments(ProgressiveClassificationCommand, None)
-        outer_parser.add_subcommand("progressive", parser)
 
 
 @torch.no_grad()
 def main():
 
-    # parser = jsonargparse.ArgumentParser()
-    # parser.add_argument("--model", type=dict)  # to ignore model
-    # parser.add_argument("--trainer", type=dict)  # to ignore model
-    # parser.add_argument("--data", type=datasets.MNISTDataModule)
-    # parser.add_argument("--config", action=jsonargparse.ActionConfigFile)
-    # parser.add_argument("--seed_everything", type=Any)
-
-    # config = parser.parse_args()
-    # config_init = parser.instantiate_classes(config)
-    # print(config_init)
+    command_map = {
+        "sample": SampleImagesCommand,
+        "predict": PredictImagesCommand,
+        "density": DensityEstimationCommand,
+        "classify": ClassificationCommand,
+        "progressive": ProgressiveClassificationCommand,
+    }
 
     parser = jsonargparse.ArgumentParser("WaveNet on MNIST")
     subcommands = parser.add_subcommands()
-    SampleDigitsCommand.add_arguments_to_parser(subcommands)
-    InfillDigitsCommand.add_arguments_to_parser(subcommands)
-    DensityEstimationCommand.add_arguments_to_parser(subcommands)
-    ClassificationCommand.add_arguments_to_parser(subcommands)
-    ProgressiveClassificationCommand.add_arguments_to_parser(subcommands)
+    for cmd, klass in command_map.items():
+        subcommands.add_subcommand(cmd, klass.get_arguments())
+    # SampleDigitsCommand.add_arguments_to_parser(subcommands)
+    # InfillDigitsCommand.add_arguments_to_parser(subcommands)
+    # DensityEstimationCommand.add_arguments_to_parser(subcommands)
+    # ClassificationCommand.add_arguments_to_parser(subcommands)
+    # ProgressiveClassificationCommand.add_arguments_to_parser(subcommands)
     config = parser.parse_args()
+    configinit = parser.instantiate_classes(config)
 
-    if config.subcommand == "sample":
-        cmd = SampleDigitsCommand(**(config.sample.as_dict()))
-    elif config.subcommand == "infill":
-        cmd = InfillDigitsCommand(**(config.infill.as_dict()))
-    elif config.subcommand == "density":
-        cmd = DensityEstimationCommand(**(config.density.as_dict()))
-    elif config.subcommand == "classify":
-        cmd = ClassificationCommand(**(config.classify.as_dict()))
-    elif config.subcommand == "progressive":
-        cmd = ProgressiveClassificationCommand(**(config.progressive.as_dict()))
+    cmdname = configinit.subcommand
+    cmd = command_map[cmdname](**(configinit[cmdname].as_dict()))
+    cmd.run()
 
-    dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    cmd.run(dev)
+    # print(configinit["density"])
+
+    # if config.subcommand == "sample":
+    #     cmd = SampleDigitsCommand(**(config.sample.as_dict()))
+    # elif config.subcommand == "infill":
+    #     cmd = InfillDigitsCommand(**(config.infill.as_dict()))
+    # elif config.subcommand == "density":
+
+    #     cmd = DensityEstimationCommand(**(configinit["density"].as_dict()))
+    # elif config.subcommand == "classify":
+    #     cmd = ClassificationCommand(**(config.classify.as_dict()))
+    # elif config.subcommand == "progressive":
+    #     cmd = ProgressiveClassificationCommand(**(config.progressive.as_dict()))
+
+    # dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    # cmd.run(dev)
 
 
 if __name__ == "__main__":

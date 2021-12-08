@@ -425,11 +425,6 @@ def main():
     subcommands = parser.add_subcommands()
     for cmd, klass in command_map.items():
         subcommands.add_subcommand(cmd, klass.get_arguments())
-    # SampleDigitsCommand.add_arguments_to_parser(subcommands)
-    # InfillDigitsCommand.add_arguments_to_parser(subcommands)
-    # DensityEstimationCommand.add_arguments_to_parser(subcommands)
-    # ClassificationCommand.add_arguments_to_parser(subcommands)
-    # ProgressiveClassificationCommand.add_arguments_to_parser(subcommands)
     config = parser.parse_args()
     configinit = parser.instantiate_classes(config)
 
@@ -437,33 +432,6 @@ def main():
     cmd = command_map[cmdname](**(configinit[cmdname].as_dict()))
     cmd.run()
 
-    # print(configinit["density"])
-
-    # if config.subcommand == "sample":
-    #     cmd = SampleDigitsCommand(**(config.sample.as_dict()))
-    # elif config.subcommand == "infill":
-    #     cmd = InfillDigitsCommand(**(config.infill.as_dict()))
-    # elif config.subcommand == "density":
-
-    #     cmd = DensityEstimationCommand(**(configinit["density"].as_dict()))
-    # elif config.subcommand == "classify":
-    #     cmd = ClassificationCommand(**(config.classify.as_dict()))
-    # elif config.subcommand == "progressive":
-    #     cmd = ProgressiveClassificationCommand(**(config.progressive.as_dict()))
-
-    # dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    # cmd.run(dev)
-
 
 if __name__ == "__main__":
-    # python -m autoregressive.scripts.mnist sample --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
-
-    # python -m autoregressive.scripts.mnist infill --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
-
-    # python -m autoregressive.scripts.mnist density --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt"
-
-    # python -m autoregressive.scripts.mnist classify --config v58\config.yaml --ckpt "v58\checkpoints\wavenet-epoch=13-val_acc_epoch=0.8960.ckpt" --show_hist=True
-
-    # python -m autoregressive.scripts.mnist progressive --config v56\config.yaml --ckpt "v56\checkpoints\wavenet-epoch=06-val_acc_epoch=0.9705.ckpt"
-
     main()

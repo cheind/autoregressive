@@ -157,6 +157,7 @@ class FSeriesDataModule(pl.LightningDataModule):
         if val_params is None:
             val_params = dataclasses.replace(train_params)
             val_params.num_curves = min(val_params.num_curves, 512)
+            val_params.seed = 123
 
         train_ds = FSeriesDataset(train_params)
         val_ds = FSeriesDataset(val_params)

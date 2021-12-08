@@ -71,7 +71,7 @@ python -m autoregressive.scripts.wavenet_mnist sample --config "models/mnist_q2/
 ```
 ---
 
-Generates images conditioned on the digit class and already observed pixels.
+Generate images conditioned on the digit class and observed pixels.
 ```bash
 python -m autoregressive.scripts.wavenet_mnist predict --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt" 
 ```

@@ -35,9 +35,9 @@ def sample_greedy(logits: torch.Tensor):
     return torch.argmax(logits, dim=1, keepdim=False)  # (B,T)
 
 
-def sample_stochastic(logits: torch.Tensor):
+def sample_stochastic(logits: torch.Tensor, tau: float = 1.0):
     # Note, sampling from dists requires (*,Q) layout
-    logits = logits.permute(0, 2, 1)
+    logits = logits.permute(0, 2, 1) / tau
     return D.Categorical(logits=logits).sample()  # (*,)
 
 

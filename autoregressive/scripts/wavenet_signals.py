@@ -65,12 +65,12 @@ class SampleSignalsCommand(BaseCommand):
             num_curves: number of curves to sample
             seed_center: whether or not all curves start at Q//2
         """
-        del data
         self.horizon = horizon
         self.condition = condition
         self.num_curves = num_curves
         self.seed_center = seed_center
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
+        self.dt = data.dt if hasattr(data, "dt") else 1.0
 
     @torch.no_grad()
     def run(self):
@@ -117,7 +117,7 @@ class SampleSignalsCommand(BaseCommand):
             # label_mode="1",
             aspect=False,
         )
-        t = torch.arange(0, horizon + 1, 1)
+        t = torch.arange(0, horizon + 1, 1) * self.dt
         for curve in curves.cpu():
             grid[0].step(t, curve, alpha=0.8)
         grid[0].set_ylim(0, model.quantization_levels)

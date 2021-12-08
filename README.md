@@ -15,7 +15,7 @@ Extended functions show how to generate MNIST images or how the MNIST digit clas
  <img src="etc/presentation/progressive_classify_mnist_b000_h757.gif" width="40%">
 </div>
 
-Note, this library does not implement (Gated) PixelCNNs, but unrolls images for the purpose of processing in the WaveNet.
+*Note, this library **does not** implement (Gated) PixelCNNs, but unrolls images for the purpose of processing in WaveNet architectures. This works surprisingly well.*
 
 ## Features
 Currently the following features are implemented
@@ -35,7 +35,7 @@ A detailed presentation with theoretical background, architectural consideration
 
 *If you spot errors or if case you have suggestions for improvements, please let me know by opening an issue.*
 
-The presentation source as well as all generated images are public domain. In case you find them useful, please leave a citation (see References below). All presentation sources can be found in `etc/presentation`. The process is written in markdown using [Marp](https://marp.app/), graph diagrams are created using [yEd](https://www.yworks.com/products/yed).
+The presentation source as well as all generated images are public domain. In case you find them useful, please leave a citation (see References below). All presentation sources can be found in `etc/presentation`. The presentation is written in markdown using [Marp](https://marp.app/), graph diagrams are created using [yEd](https://www.yworks.com/products/yed).
 
 ## Installation
 To install run,

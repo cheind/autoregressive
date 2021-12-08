@@ -86,13 +86,12 @@ python -m autoregressive.scripts.wavenet_mnist classify --config "models/mnist_q
 ## References
 
 ```bibtex
-
 @misc{heindl2021autoreg, 
-    title={Autoregressive Models}, 
-    journal={PROFACTOR Journal Club}, 
-    author={Heindl, Christoph},
-    year={2021},
-    howpublished={\url{https://github.com/cheind/autoregressive}}
+  title={Autoregressive Models}, 
+  journal={PROFACTOR Journal Club}, 
+  author={Heindl, Christoph},
+  year={2021},
+  howpublished={\url{https://github.com/cheind/autoregressive}}
 }
 
 @article{oord2016wavenet,

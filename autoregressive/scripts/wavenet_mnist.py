@@ -6,8 +6,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.data
-import pytorch_lightning as pl
-import yaml
 import abc
 from torchvision.utils import make_grid
 

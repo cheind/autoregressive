@@ -8,7 +8,7 @@ For presentation purposes, the WaveNet-like models are applied to randomized Fou
  <img src="etc/presentation/compare_curves_train_unroll.svg" width="60%">
 </div>
 
-Extended functions show how to generate MNIST images or how the MNIST digit class may be estimated (progressively) from observed pixels p(y|x) using a conditional WaveNet p(x|y=class) and Bayes' rule. Left: sampled MNIST digits, Right:progressive class estimates as more pixels are observed.
+Advanced functions show how to generate MNIST images and how to estimate the MNIST digit class (progressively) `p(y=class|x)` from observed pixels using a conditional WaveNet `p(x|y=class)` and Bayes rule. Left: sampled MNIST digits, right: progressive class estimates as more pixels are observed.
 
 <div align="center">
  <img src="etc/presentation/wavenet-sample-q256.png" width="40%">

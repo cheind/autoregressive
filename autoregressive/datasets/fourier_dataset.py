@@ -35,7 +35,7 @@ class FSeriesParams:
     dt: float = 0.02
     fterm_range: IntOrIntRange = (3, 5)
     tstart_range: FloatOrFloatRange = 0.0
-    period_range: IntOrIntRange = 10.0
+    period_range: IntOrIntRange = 10
     bias_range: FloatOrFloatRange = 0.0
     coeff_range: FloatOrFloatRange = (-1.0, 1.0)
     phase_range: FloatOrFloatRange = (-PI, PI)

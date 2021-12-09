@@ -442,7 +442,7 @@ $$
 \log p(\mathbf{X}=\mathbf{x}) = \log \sum_{y_i=1}^Y \exp\left[\log p(\mathbf{X}=\mathbf{x}|Y=y_i)p(Y=y_i)\right].
 $$
 
-The image on the right shows log probabilities as a single input image is incrementally rotated.
+The image on the right shows log probabilities as a single input image is incrementally rotated. Note, this is an unconditional log probability, which tells us whether the image is an inlier or outlier wrt. the model.
 
 ---
 ![bg fit right:35%](wavenet-classification.svg)

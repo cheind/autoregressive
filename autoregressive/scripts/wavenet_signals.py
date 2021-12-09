@@ -162,6 +162,7 @@ class PredictSignalsCommand(BaseCommand):
         num_trajectories: int = 1,
         show_confidence: bool = False,
         seed: int = None,
+        noise_scale: int = 0,
         tau: float = 1.0,
         **kwargs,
     ) -> None:
@@ -187,6 +188,7 @@ class PredictSignalsCommand(BaseCommand):
         self.show_confidence = show_confidence
         self.seed = seed
         self.tau = tau
+        self.noise_scale = noise_scale
 
     @torch.no_grad()
     def run(self):
@@ -202,6 +204,14 @@ class PredictSignalsCommand(BaseCommand):
             conditions = torch.stack(conditions, 0).to(dev)
         else:
             conditions = None
+
+        # Add noise to the observable part
+        noise = (
+            torch.randn_like(curves[..., :num_obs], dtype=torch.float32)
+            * self.noise_scale
+        )
+        noise = noise.round().long()
+        curves[..., :num_obs] += noise
 
         # Repeat if we need more than one trajectory per curve
         if self.num_trajectories > 1:

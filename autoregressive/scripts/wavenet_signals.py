@@ -5,7 +5,6 @@ from typing import Any
 import jsonargparse
 from functools import partial
 import matplotlib.pyplot as plt
-import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F

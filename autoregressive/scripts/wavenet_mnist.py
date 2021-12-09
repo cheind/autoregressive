@@ -1,16 +1,13 @@
-from typing import Any
-
 import jsonargparse
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.data
-import abc
 from torchvision.utils import make_grid
 
 from .. import datasets, generators, sampling, wave
-from .wavenet_signals import BaseCommand
+from . import wavenet_signals
 
 
 def load_images_targets(data: datasets.MNISTDataModule, n: int, seed: int = None):
@@ -73,7 +70,7 @@ def compute_log_pxy(
     return torch.stack(log_pxys, -1)
 
 
-class SampleImagesCommand(BaseCommand):
+class SampleImagesCommand(wavenet_signals.BaseCommand):
     """Samples from the condition distribution p(x|digit) where x is an mnist image."""
 
     def __init__(

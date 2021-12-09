@@ -335,13 +335,13 @@ The following diagrams show multiple samples $\mathbf{x} \sim p(\mathbf{X}|Y=\te
 
 ---
 # Prediction Results
-In the following diagrams, multiple samples from the distribution $\mathbf{x} \sim p(\mathbf{X}_{>\textrm{obs}}|\mathbf{X}_{\le \textrm{obs}}Y)$ are shown. That is, the model predicts the future signal shape. Observe that for periodic signals, only little drift occurs as the horizon increases.
+In the following diagrams, multiple samples from the distribution $\mathbf{x} \sim p(\mathbf{X}_{>\textrm{obs}}|\mathbf{X}_{\le \textrm{obs}},Y)$ are shown. That is, the model predicts the future signal shape. Observe that for periodic signals, only little drift occurs as the horizon increases.
 
 ![center h:350](wavenet-predict-samples.svg)
 
 ---
 # Prediction Results - Confidence Bounds
-We can interpret each future trajectory as a sample from the distribution $\mathbf{x} \sim p(\mathbf{X}_{>\textrm{obs}}|\mathbf{X}_{\le \textrm{obs}}Y)$. Sampling enough trajectories, allows us to estimate confidence bounds of the model as shown below
+We can interpret each future trajectory as a sample from the distribution $\mathbf{x} \sim p(\mathbf{X}_{>\textrm{obs}}|\mathbf{X}_{\le \textrm{obs}},Y)$. Sampling enough trajectories, allows us to estimate confidence bounds of the model as shown below
 
 ![center h:350](wavenet-predict-confidence.svg)
 

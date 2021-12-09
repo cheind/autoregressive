@@ -60,7 +60,7 @@ The default models conditions on the periodicity of the signal. For the pre-trai
 
 Predict the shape of partially observable curves.
 ```bash
-python -m autoregressive.scripts.wavenet_signals sample --config "models/fseries/config.yaml" --ckpt "models/fseries/xxxxxx.ckpt" --horizon 1500 --num_observed 50 --num_trajectories 20 --num_curves 1 --show_confidence true
+python -m autoregressive.scripts.wavenet_signals predict --config "models/fseries/config.yaml" --ckpt "models/fseries/xxxxxx.ckpt" --horizon 1500 --num_observed 50 --num_trajectories 20 --num_curves 1 --show_confidence true
 ```
 
 ### 2D MNIST

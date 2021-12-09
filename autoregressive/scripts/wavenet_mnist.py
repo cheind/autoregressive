@@ -4,8 +4,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.data
-from torchvision.utils import make_grid
 from matplotlib.gridspec import GridSpec
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+from torchvision.utils import make_grid
 
 from .. import datasets, generators, sampling, wave
 from . import wavenet_signals
@@ -66,7 +67,7 @@ def compute_log_pxy(
             B, (T - 1)
         )  # (B,T)
         log_pxy = log_px_y[:, :horizon].sum(-1) + log_py
-        log_pxys.append(log_pxy)
+        log_pxys.append(log_pxy.clone())
         del logits
     return torch.stack(log_pxys, -1)
 
@@ -210,6 +211,7 @@ class DensityEstimationCommand(wavenet_signals.BaseCommand):
         ckpt: str,
         data: datasets.MNISTDataModule,
         num_images: int = 5,
+        seed: int = None,
         **kwargs,
     ) -> None:
         """
@@ -217,28 +219,84 @@ class DensityEstimationCommand(wavenet_signals.BaseCommand):
             ckpt: Path to model parameters
             data: MNIST data module
             num_images: Number of images to generate
+            seed: Seed random number generator
         """
         del kwargs
         self.num_images = num_images
         self.data = data
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
+        self.seed = seed
 
     @torch.no_grad()
     def run(self):
         dev = self.default_device
         model = self.model.to(dev)
         Q = self.model.quantization_levels
+        N = 100
+        step = (N // 10) - 1
+        angles = torch.tensor([-1.0, 0.0, 1.0, 3.1415 / 2, 2.0])
+        imgs, targets = load_images_targets(self.data, 1, seed=self.seed)
+        img = imgs[0].to(dev)
+        target = targets[0]
+        imgs = self._rotated_versions(img, angles)
 
-        imgs, _ = load_images_targets(self.data, self.num_images)
-        imgs = torch.stack(imgs, 0).to(dev)
-        log_pxys = compute_log_pxy(imgs, model)
-        log_px = torch.logsumexp(log_pxys, -1)
-        print("log p(x) x~p(MNIST)", log_px)
+        log_pxs = []
+        log_px_ys = []
+        for i in range(imgs.shape[0]):
+            log_pxy = compute_log_pxy(imgs[i : i + 1], model)  # (1,10)
+            log_px_y = log_pxy - torch.log(torch.tensor(1 / 10))  # (1,10)
+            log_px_ys.append(log_px_y)
+            log_px = torch.logsumexp(log_pxy, -1)
+            log_pxs.append(log_px)
+        log_pxs = torch.cat(log_pxs)  # log p(x), (100)
+        log_px_ys = torch.stack(log_px_ys, -1)  # log p(x|y), (1,10,100)
+        print(log_px_ys.shape)
+        print("log p(x) x~p(rot(MNIST))", log_pxs)
+        fig, ax = plt.subplots()
+        for (img, y, x) in zip(imgs[::step], log_pxs[::step], angles[::step]):
+            ab = AnnotationBbox(
+                OffsetImage(img.view(28, 28).cpu()),
+                (x, y),
+                xybox=(x, 0),
+                xycoords="data",
+                pad=0.0,
+                frameon=True,
+                box_alignment=(0.5, 0.5),
+                arrowprops={"arrowstyle": "-", "linestyle": "--", "linewidth": 0.5},
+            )
+            ax.add_artist(ab)
+        ax.plot(angles, log_pxs.cpu())
+        ax.set_xlabel("Rotation angle [rad]")
+        ax.set_ylabel("log p(x)")
+        ax.set_ylim(log_pxs.min().item(), 0)
+        fig
+        fig.savefig("tmp/mnist-density.svg", bbox_inches="tight")
+        plt.tight_layout()
+        plt.show()
 
         imgs_rand = torch.randint(0, Q, (5, 784)).to(dev)
         log_pxys = compute_log_pxy(imgs_rand, model)
         log_px = torch.logsumexp(log_pxys, -1)
         print(f"log p(x) x~U(0,{Q})", log_px)
+
+    def _rotated_versions(self, img, angles):
+        N = len(angles)
+        img = torch.as_tensor(img).view(1, 1, 28, 28).float().repeat(N, 1, 1, 1)
+        cosa = torch.cos(angles)
+        sina = torch.sin(angles)
+        rots = torch.zeros(N, 2, 3)
+        rots[:, 0, 0] = cosa
+        rots[:, 1, 1] = cosa
+        rots[:, 0, 1] = sina
+        rots[:, 1, 0] = -sina
+        grids = F.affine_grid(rots, [N, 1, 28, 28], align_corners=False).to(img.device)
+        rotated_images = F.grid_sample(img, grids, align_corners=False, mode="nearest")
+        rotated_images = rotated_images.long().view(-1, 28 * 28)
+        # fig, axs = plt.subplots(1, 2)
+        # axs[0].imshow(rotated_images[0].view(28, 28).cpu())
+        # axs[1].imshow(rotated_images[-1].view(28, 28).cpu())
+        # plt.show()
+        return rotated_images
 
 
 class ClassificationCommand(wavenet_signals.BaseCommand):

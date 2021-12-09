@@ -431,6 +431,7 @@ Note
 - Fading effect to soften hard edges is captured by the model.
 
 ---
+![bg fit right:45%](mnist-density-digit7.svg)
 # MNIST Density Estimation Results
 Assuming we know the class probabilities $p(Y)=\frac{1}{|Y|}$, we can compute the marginal image probability as follows
 $$
@@ -440,7 +441,8 @@ For computational reasons, we instead compute in the library
 $$
 \log p(\mathbf{X}=\mathbf{x}) = \log \sum_{y_i=1}^Y \exp\left[\log p(\mathbf{X}=\mathbf{x}|Y=y_i)p(Y=y_i)\right].
 $$
-For MNIST images the average $\log p(\mathbf{X}=\mathbf{x})$ is -60.7, whereas random images range around -1300.0.
+
+The image on the right shows log probabilities as a single input image is incrementally rotated.
 
 ---
 ![bg fit right:35%](wavenet-classification.svg)

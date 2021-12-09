@@ -129,7 +129,7 @@ class SampleImagesCommand(wavenet_signals.BaseCommand):
         plt.show()
 
 
-class PredictImagesCommand(BaseCommand):
+class PredictImagesCommand(wavenet_signals.BaseCommand):
     """Reconstructs partial MNIST images."""
 
     def __init__(
@@ -187,7 +187,7 @@ class PredictImagesCommand(BaseCommand):
         plt.show()
 
 
-class DensityEstimationCommand(BaseCommand):
+class DensityEstimationCommand(wavenet_signals.BaseCommand):
     """Estimates marginal log p(X=x), assuming p(Y=y)=1/|Y|"""
 
     def __init__(
@@ -226,7 +226,7 @@ class DensityEstimationCommand(BaseCommand):
         print(f"log p(x) x~U(0,{Q})", log_px)
 
 
-class ClassificationCommand(BaseCommand):
+class ClassificationCommand(wavenet_signals.BaseCommand):
     """Estimates p(Y=y|X=x)"""
 
     def __init__(
@@ -314,7 +314,7 @@ class ClassificationCommand(BaseCommand):
         return py_x, targets
 
 
-class ProgressiveClassificationCommand(BaseCommand):
+class ProgressiveClassificationCommand(wavenet_signals.BaseCommand):
     """Estimates p(Y=y|X=x) progressively, by observing more pixels in each iteration."""
 
     def __init__(

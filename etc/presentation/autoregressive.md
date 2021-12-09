@@ -414,8 +414,8 @@ Side note on Z-filling curves
 - I played around with other z-filling curves for unrolling such as Peano curves, but the results have been considerably worse. I believe that's due to the effect that the distance to the north pixel varies across image columns.
 
 ---
-![bg fit right:50%](wavenet-infill-q256-o392.png)
-# MNIST Completion Results
+![bg fit right:45%](wavenet-mnist-predict-o392.svg)
+# MNIST Prediction Results
 
 MNIST image reconstructions drawn from 
 $$
@@ -423,12 +423,12 @@ p(X_{N+1},\ldots,X_{T} \mid X_1,\ldots,X_{N},Y),
 $$
 where $X_i$ denotes a random variable corresponding to the i-th (unrolled) MNIST 28x28 image pixel value and $y$ is the digit class. 
 
-Left: original images, Right: reconstructed image after observing $N$=392 (first image half). Images are from the test set.
+Top row: input images from the test set, of which the first 50% of all pixels are considered to be observed. Bottom rows: Predicted reconstructions.
 
 Note
-- Digit style is maintained during generation (thick strokes vs. thin strokes) 
-- Fading effect to soften hard edges is captured by the model
-
+- Digit style is maintained during generation (thick strokes vs. thin strokes).
+- Model capable of varying the global appearance (see second 7).
+- Fading effect to soften hard edges is captured by the model.
 
 ---
 # MNIST Density Estimation Results

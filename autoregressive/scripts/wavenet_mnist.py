@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.data
 from torchvision.utils import make_grid
+from matplotlib.gridspec import GridSpec
 
 from .. import datasets, generators, sampling, wave
 from . import wavenet_signals
@@ -125,7 +126,7 @@ class SampleImagesCommand(wavenet_signals.BaseCommand):
         fig.add_axes(ax)
         ax.imshow(grid.cpu().float().permute(1, 2, 0)[..., 0], cmap=cmap)
         ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-        fig.savefig("tmp/sample_digits.png", bbox_inches="tight")
+        fig.savefig("tmp/mnist-sample.png", bbox_inches="tight")
         plt.show()
 
 
@@ -136,7 +137,8 @@ class PredictImagesCommand(wavenet_signals.BaseCommand):
         self,
         ckpt: str,
         data: datasets.MNISTDataModule,
-        num_images: int = 25,
+        num_images: int = 7,
+        num_samples_per_digit: int = 6,
         num_pix_observed: int = 392,
         **kwargs,
     ) -> None:
@@ -144,11 +146,13 @@ class PredictImagesCommand(wavenet_signals.BaseCommand):
         Args:
             ckpt: Path to model parameters
             data: MNIST data module
-            num_images: Number of images to generate
+            num_images: Number of images to predict for
+            num_samples_per_digit: Number of samples (predictions) per digit
             num_pix_observed: Number of pixels (scanline order) of input image to be considered observed by the network
         """
         self.num_images = num_images
         self.num_pix_observed = num_pix_observed
+        self.num_samples_per_digit = num_samples_per_digit
         self.data = data
         self.model = wave.WaveNet.load_from_checkpoint(ckpt).eval()
 
@@ -162,6 +166,10 @@ class PredictImagesCommand(wavenet_signals.BaseCommand):
         targets = torch.stack(targets, 0)
         targets = F.one_hot(targets, num_classes=10).unsqueeze(-1).float().to(dev)
 
+        if self.num_samples_per_digit > 1:
+            imgs = imgs.repeat(self.num_samples_per_digit, 1)
+            targets = targets.repeat(self.num_samples_per_digit, 1, 1)
+
         g = generators.generate_fast(
             model=model,
             initial_obs=imgs[..., : self.num_pix_observed],
@@ -174,16 +182,23 @@ class PredictImagesCommand(wavenet_signals.BaseCommand):
         digits = torch.cat((imgs[..., : self.num_pix_observed], digits), 1).view(
             -1, 1, 28, 28
         )  # (B,C,H,W)
-        grid = make_grid(digits, nrow=5)
-        gridorig = make_grid(imgs.view(-1, 1, 28, 28), nrow=5)
 
+        # top-row: orig, other rows: prediction
+        gs = GridSpec(2, 1, height_ratios=[1, self.num_samples_per_digit])
+        grid_orig = make_grid(
+            imgs[: self.num_images].view(-1, 1, 28, 28), nrow=self.num_images, padding=0
+        )
+        grid_pred = make_grid(digits, nrow=self.num_images, padding=0)
         fig = plt.figure(figsize=(8, 8), frameon=False)
-        axs = (plt.subplot(121), plt.subplot(122))
-        axs[0].imshow(gridorig.cpu().float().permute(1, 2, 0)[..., 0])
-        axs[0].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-        axs[1].imshow(grid.cpu().float().permute(1, 2, 0)[..., 0])
-        axs[1].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-        fig.savefig("tmp/infill_digits.png", bbox_inches="tight")
+        ax0 = fig.add_subplot(gs[0, :])
+        ax1 = fig.add_subplot(gs[1, :])
+        ax0.set_ylabel("orig")
+        ax1.set_ylabel("pred")
+        ax0.set(yticklabels=[], xticklabels=[], xticks=[], yticks=[])
+        ax1.set(yticklabels=[], xticklabels=[], xticks=[], yticks=[])
+        ax0.imshow(grid_orig.cpu().float().permute(1, 2, 0)[..., 0])
+        ax1.imshow(grid_pred.cpu().float().permute(1, 2, 0)[..., 0])
+        fig.savefig("tmp/mnist-predict.svg", bbox_inches="tight")
         plt.show()
 
 
@@ -277,7 +292,7 @@ class ClassificationCommand(wavenet_signals.BaseCommand):
             f"avg. accuracy {(all_preds==all_targets).sum()/all_targets.shape[0]:.4f}"
         )
         np.savez(
-            "tmp/classify.npz",
+            "tmp/mnist-classify.npz",
             preds=all_preds.cpu().numpy(),
             targets=all_targets.cpu().numpy(),
             probs=all_probs.cpu().numpy(),
@@ -299,7 +314,7 @@ class ClassificationCommand(wavenet_signals.BaseCommand):
         axs[0, 0].set_title("Input")
         axs[0, 1].set_title("Prediction")
         plt.tight_layout()
-        fig.savefig(f"tmp/classify_mnist_{batch_idx:03}.svg")
+        fig.savefig(f"tmp/mnist-classify-{batch_idx:03}.svg")
         if show:
             plt.show()
 
@@ -372,7 +387,7 @@ class ProgressiveClassificationCommand(wavenet_signals.BaseCommand):
         axs[0, 0].set_title("Input")
         axs[0, 1].set_title("Prediction")
         plt.tight_layout()
-        fig.savefig(f"tmp/progressive_classify_mnist_b{batchidx:03}_h{horizon:03}.png")
+        fig.savefig(f"tmp/mnist-classify-progressive-{batchidx:03}-h{horizon:03}.png")
         if self.show_hist:
             plt.show()
         plt.close(fig)

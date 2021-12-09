@@ -323,15 +323,30 @@ The WaveNet idea extends to 2D spatial domain*. In this library the most straigh
 
 # 1D Signal Setup
 
-Instead of audio waveforms as input, using a Fourier dataset with randomized coefficients, number of terms and periodicity (sampling: 50Hz, quantization: 127 bins, encoding one-hot)
+Instead of audio waveforms as input, using a Fourier dataset with randomized coefficients, number of terms and periodicity (sampling: 50Hz, quantization: 127 bins, encoding one-hot, conditioned on periodicity between 5-10secs)
 
 ![fit center](fourier_samples.svg)
 
 ---
+# Sampling Results
+The following diagrams show multiple samples $\mathbf{x} \sim p(\mathbf{X}|Y=\textrm{period})$: short periods (~5secs), longer periods (~10secs). 
 
-![bg fit right:50%](compare_curves_train_unroll.svg)
+![center fit h:250](wavenet-samples-T5.svg)![center fit h:250](wavenet_samples-T10.svg)
+
 ---
+# Prediction Results
+In the following diagrams, multiple samples from the distribution $\mathbf{x} \sim p(\mathbf{X}_{>\textrm{obs}}|\mathbf{X}_{\le \textrm{obs}}Y)$ are shown. That is, the model predicts the future signal shape. Observe that for periodic signals, only little drift occurs as the horizon increases.
 
+![center h:350](wavenet-predict-samples.svg)
+
+---
+# Prediction Results - Confidence Bounds
+We can interpret each future trajectory as a sample from the distribution $\mathbf{x} \sim p(\mathbf{X}_{>\textrm{obs}}|\mathbf{X}_{\le \textrm{obs}}Y)$. Sampling enough trajectories, allows us to estimate confidence bounds of the model as shown below
+
+![center h:350](wavenet-predict-confidence.svg)
+
+---
+![bg fit right:50%](compare_curves_train_unroll.svg)
 # Train-Unrolling Results
 
 N-step forecast comparison between two models trained with and without unrolling on Fourier-series dataset with up to 4 terms.
@@ -343,7 +358,6 @@ N-step forecast comparison between two models trained with and without unrolling
 (-) Sparser losses
 
 ---
-
 ![bg fit right:50%](compare_curves_noise.svg)
 
 # Noisy Train-Unrolling Results
@@ -364,20 +378,6 @@ N-step prediction based on noisy observations - comparison between two models tr
 ## Conclusion
 (+) Generally higher validation acc. at earlier training epochs.
 (+) Similar picture if validation unrolling > train unrolling steps.
-
----
-# Generative Results
-
-The following graph shows four samples drawn from the models' prior distribution (periodicity fixed in training).
-
-![center w:1024](prior_samples.svg)
-
----
-# Conditional Generative Results
-
-The following graphs depict samples using different periodicity conditions: Large period (~20secs), short periods (~5secs). Model trained without unrolling.
-
-![center fit h:256](wavenet-generate-condition15.svg) ![center fit h:256](wavenet-generate-condition1.svg)
 
 ---
 ![bg fit right:50%](benchmark_generators.svg)

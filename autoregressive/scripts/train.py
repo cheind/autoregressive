@@ -22,7 +22,6 @@ def cli_main():
             if len(ckpt) > 0:
                 p = Path(ckpt[0].best_model_path)
                 _logger.info(f"Best val. model path: {p}")
-            return super().after_fit()
 
         def add_arguments_to_parser(self, parser):
             parser.link_arguments(

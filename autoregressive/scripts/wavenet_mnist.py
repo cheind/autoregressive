@@ -10,7 +10,7 @@ import abc
 from torchvision.utils import make_grid
 
 from .. import datasets, generators, sampling, wave
-from .wavenet_mnist import BaseCommand
+from .wavenet_signals import BaseCommand
 
 
 def load_images_targets(data: datasets.MNISTDataModule, n: int, seed: int = None):

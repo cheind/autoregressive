@@ -48,11 +48,11 @@ which requires Python 3.9 and a recent PyTorch > 1.9
 ## Usage
 The library comes with a set of pre-trained models in [`models/`](models/). The following commands use those models to make various predictions. Many listed commands come with additional parameters; use `--help` to get additional information.
 
-### 1D Fourier
+### 1D Fourier series
 
 Sample new signals from scratch
 ```bash
-python -m autoregressive.scripts.wavenet_signals sample --config "models/fseries/config.yaml" --ckpt "models/fseries/xxxxxx.ckpt" --condition 4 --horizon 1000
+python -m autoregressive.scripts.wavenet_signals sample --config "models/fseries_q127/config.yaml" --ckpt "models/fseries_q127/xxxxxx.ckpt" --condition 4 --horizon 1000
 ```
 The default models conditions on the periodicity of the signal. For the pre-trained model the value range is `int: [0..4]`, corresponding to periods of 5-10secs.
 
@@ -60,7 +60,7 @@ The default models conditions on the periodicity of the signal. For the pre-trai
 
 Predict the shape of partially observable curves.
 ```bash
-python -m autoregressive.scripts.wavenet_signals predict --config "models/fseries/config.yaml" --ckpt "models/fseries/xxxxxx.ckpt" --horizon 1500 --num_observed 50 --num_trajectories 20 --num_curves 1 --show_confidence true
+python -m autoregressive.scripts.wavenet_signals predict --config "models/fseries_q127/config.yaml" --ckpt "models/fseries_q127/xxxxxx.ckpt" --horizon 1500 --num_observed 50 --num_trajectories 20 --num_curves 1 --show_confidence true
 ```
 
 ### 2D MNIST
@@ -77,10 +77,25 @@ python -m autoregressive.scripts.wavenet_mnist predict --config "models/mnist_q2
 ```
 
 ---
-
 To perform classification
 ```bash
 python -m autoregressive.scripts.wavenet_mnist classify --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
+```
+
+## Train
+To train / reproduce a model
+```bash
+python -m autoregressive.scripts.train --config "models/mnist_q2/config.yaml"
+```
+Progress is logged to Tensorboard
+```
+tensorboard --logdir lightning_logs
+```
+
+## Test
+To run the tests
+```
+pytest
 ```
 
 ## References

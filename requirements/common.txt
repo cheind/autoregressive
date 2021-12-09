@@ -1,6 +1,6 @@
-torch
-torchvision
-pytorch_lightning
+torch>=1.9.0
+torchvision>=0.10.0
+pytorch_lightning>=1.5.5
 jsonargparse[signatures]
 numpy
 matplotlib

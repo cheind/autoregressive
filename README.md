@@ -85,11 +85,15 @@ python -m autoregressive.scripts.wavenet_mnist classify --config "models/mnist_q
 ## Train
 To train / reproduce a model
 ```bash
-python -m autoregressive.scripts.train --config "models/mnist_q2/config.yaml"
+python -m autoregressive.scripts.train fit --config "models/mnist_q2/config.yaml"
 ```
 Progress is logged to Tensorboard
 ```
 tensorboard --logdir lightning_logs
+```
+To generate a training configuration file for a specific dataset use
+```
+python -m autoregressive.scripts.train fit --data autoregressive.datasets.FSeriesDataModule --print_config > fseries_config.yaml
 ```
 
 ## Test

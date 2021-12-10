@@ -1,3 +1,5 @@
 scipy
 pytest
 ray[tune]
+flake8
+black

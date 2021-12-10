@@ -21,6 +21,10 @@ if TYPE_CHECKING:
     from .sampling import ObservationSampler
     from .wave import WaveLayerBase, WaveNet
 
+"""WaveGenerator
+
+A WaveGenerator allows endless generation of WaveNet sequences.
+"""
 WaveGenerator = Iterator[Tuple[torch.Tensor, torch.Tensor]]
 
 
@@ -39,6 +43,7 @@ class RecentBuffer:
         self._start = self._T if empty else 0
 
     def add(self, x: torch.Tensor):
+        """Append a tensor to the buffer."""
         S = x.shape[-1]
         N = min(self._T, S)
         # Both input and queue size can of zero size (temporal). For queues,
@@ -53,6 +58,7 @@ class RecentBuffer:
 
     @property
     def buffer(self):
+        """Access the current state of the buffer"""
         if self._start > 0:
             return self._buf[..., self._start :]
         else:
@@ -60,6 +66,15 @@ class RecentBuffer:
 
 
 class Generator:
+    """Default WaveNet generator.
+
+    A WaveNet generator incrementally predicts next sample distributions p(X_{i+1}|X_{0..i}).
+    The default generator, requires R (receptive field) length input samples for each such predictions,
+    which makes it rather slow.
+
+    See `generate` below for usage.
+    """
+
     def __init__(self, model: "WaveNet", batch_size: int, device: torch.device) -> None:
         self.model = model
         self.R = self.model.receptive_field
@@ -111,6 +126,15 @@ class Generator:
 
 
 class FastGenerator:
+    """Fast WaveNet generator.
+
+    A WaveNet generator incrementally predicts next sample distributions p(X_{i+1}|X_{0..i}).
+    Compared to the default generator, this generator stores previously computed intermediate results
+    to speed up prediction.
+
+    See `generate_fast` for example usage.
+    """
+
     # note, not thread-safe. modifies global state of model using hooks.
     def __init__(self, model: "WaveNet", batch_size: int, device: torch.device) -> None:
         self.model = model
@@ -208,6 +232,20 @@ def generate(
     sampler: "ObservationSampler",
     global_cond: torch.Tensor = None,
 ) -> WaveGenerator:
+    """Generates samples from previous observations.
+
+    This method uses the standard generator, which requires R observations to make
+    the next sample distribution prediction.
+
+    Args:
+        model: WaveNet model to use
+        initial_obs: (B,Q,T) or (B,T) tensor containing past observations
+        sampler: function to sample from (B,Q,T)
+        global_cond: optional global condition to use during generation.
+
+    Returns
+        g: WaveGenerator
+    """
     g = Generator(model, initial_obs.shape[0], initial_obs.device)
     g.push(initial_obs[..., :-1], c=global_cond)
     nextx = initial_obs[..., -1:]
@@ -225,6 +263,20 @@ def generate_fast(
     layer_inputs: List[torch.Tensor] = None,
     global_cond: torch.Tensor = None,
 ) -> WaveGenerator:
+    """Generates new samples from previous observations.
+
+    This method uses the fast generator, which tracks intermediate results to
+    speed up generation of new samples.
+
+    Args:
+        model: WaveNet model to use
+        initial_obs: (B,Q,T) or (B,T) tensor containing past observations
+        sampler: function to sample from (B,Q,T)
+        layer_inputs: optional List[Tensor] corresponding to model layer-inputs of initial_obs
+        global_cond: optional global condition to use during generation.
+    Returns
+        g: WaveGenerator
+    """
 
     g = FastGenerator(model, initial_obs.shape[0], initial_obs.device)
     if layer_inputs is not None:
@@ -261,7 +313,24 @@ def rolling_origin(
     skip_partial: bool = True,
     global_cond: torch.Tensor = None,
 ):
-    # See https://cran.r-project.org/web/packages/greybox/vignettes/ro.html
+    """Performs a rolling origin operation.
+    See https://cran.r-project.org/web/packages/greybox/vignettes/ro.html for details.
+
+    Args:
+        model: WaveNet model
+        sampler: function to sample from (B,Q,1) logits
+        obs: (B,Q,T) known observations for rolling origin inputs
+        horizon: number of samples to generate per origin
+        num_origins: number of origins O
+        random_origins: select origins randomly
+        skip_partial: Only select origins for positions where R past observations are available.
+        global_cond: Optional global condition to apply
+
+    Returns:
+        logits: (O,B,Q,H) tensor of rolling origin logits
+        roll_idx: (O,) tensor of origin indices
+        targets: (B,T) Target values
+    """
     T, R = obs.shape[-1], model.receptive_field
     if horizon == 1:
         warnings.warn(
@@ -297,6 +366,17 @@ def rolling_origin(
 def collate_rolling_origin(
     roll_logits: torch.Tensor, roll_idx: torch.Tensor, targets: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Collates the results of a rolling origin operation for cross entropy losses.
+
+    Args:
+        logits: (O,B,Q,H) tensor of rolling origin logits
+        roll_idx: (O,) tensor of origin indices
+        targets: (B,T) Target values
+
+    Returns:
+        logits: (O*B,Q,H) tensor
+        targets: (O*B,H) tensor
+    """
     # roll_logits: (R,B,Q,H)
     # roll_idx: (R,)
     # targets: (B,T)

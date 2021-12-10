@@ -1,23 +1,17 @@
 __all__ = ["one_hotf"]
 import torch
-from torch._C import dtype
 import torch.nn.functional as F
 
 
 def one_hotf(x: torch.Tensor, quantization_levels: int):
     """Returns x one-hot encoded.
 
-    Params
-    ------
-    x: (B,T) or (B,Q,T) tensor
-        compressed or already one-hot encoded input
-    quantization_levels: int
-        The total number of quantization levels
+    Args:
+        x: (B,T) or (B,Q,T) tensor compressed or already one-hot encoded input
+        quantization_levels: the number of quantization levels
 
-    Returns
-    -------
-    o: (B,Q,T) tensor
-        Floating point one-hot encoded input
+    Returns:
+        o: (B,Q,T) tensor containing one-hot encoded input
     """
     if x.dim() == 2:
         # compressed encoding (B,T) -> one encoding (B,Q,T)
@@ -30,6 +24,8 @@ def positional_encoding_lut(
     length: int, base: int = 10000, depth: int = 128, device: torch.device = None
 ) -> torch.Tensor:
     """Computes a positional encoding lookup tensor based on transformer sin/cos encodings.
+
+    This is currently not used, but remains here for future work.
 
     Results in an encoding that is
      - unique for each timestep

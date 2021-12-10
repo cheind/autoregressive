@@ -5,7 +5,7 @@ __all__ = [
 ]
 
 from collections.abc import Sequence
-from typing import Any, Callable, Dict, Tuple, Union
+from typing import Any, Callable, Dict, Tuple, Union, Optional
 from functools import partial
 import dataclasses
 import logging
@@ -149,7 +149,8 @@ class FSeriesDataModule(pl.LightningDataModule):
         batch_size: int = 64,
         num_workers: int = 0,
         train_params: FSeriesParams = FSeriesParams(smoothness=0.75),
-        val_params: FSeriesParams = None,
+        val_params: Optional[FSeriesParams] = None,
+        test_params: Optional[FSeriesParams] = None,
         period_conditioning: bool = False,
     ):
         super().__init__()
@@ -157,7 +158,10 @@ class FSeriesDataModule(pl.LightningDataModule):
         if val_params is None:
             val_params = dataclasses.replace(train_params)
             val_params.num_curves = min(val_params.num_curves, 512)
-            val_params.seed = 123
+
+        if test_params is None:
+            test_params = dataclasses.replace(val_params)
+            test_params.seed = 123
 
         train_ds = FSeriesDataset(train_params)
         val_ds = FSeriesDataset(val_params)
@@ -178,6 +182,7 @@ class FSeriesDataModule(pl.LightningDataModule):
             )
         self.train_ds = FSeriesDataset(train_params, transform=transform)
         self.val_ds = FSeriesDataset(val_params, transform=transform)
+        self.test_ds = FSeriesDataset(test_params, transform=transform)
         self.quantization_levels = quantization_levels
         self.train_params = train_params
         self.val_params = val_params
@@ -197,6 +202,15 @@ class FSeriesDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return torch.utils.data.DataLoader(
             self.val_ds,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=False,
+            collate_fn=sd.series_collate,
+        )
+
+    def test_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.test_ds,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,

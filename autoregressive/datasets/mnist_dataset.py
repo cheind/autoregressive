@@ -26,7 +26,7 @@ class MNISTSeriesDataset(MNIST):
         train: bool = True,
         transform: Callable[[sd.SeriesMeta], tuple[sd.SeriesMeta]] = None,
         binarize: bool = False,
-        apply_peano_map: bool = True,
+        apply_peano_map: bool = False,
         download: bool = False,
     ) -> None:
         super().__init__(

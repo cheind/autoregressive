@@ -4,4 +4,3 @@ pytorch_lightning>=1.5.5
 jsonargparse[signatures]
 numpy
 matplotlib
-ray[tune]

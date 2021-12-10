@@ -30,6 +30,11 @@ def compute_receptive_field(
 
 
 class WaveLayerBase(torch.nn.Module):
+    """Base class for layers in a WaveNet.
+
+    Performs book-keeping for external algorithms such as fast generators.
+    """
+
     def __init__(
         self,
         kernel_size: int,
@@ -44,6 +49,13 @@ class WaveLayerBase(torch.nn.Module):
 
 
 class WaveNetLayer(WaveLayerBase):
+    """A WaveNet layer.
+
+    Returns residuals and skip results given layer inputs using
+    a residual connection and gated activations. This module can
+    also be used as an initial layer for raw inputs.
+    """
+
     def __init__(
         self,
         kernel_size: int,
@@ -103,6 +115,20 @@ class WaveNetLayer(WaveLayerBase):
             )
 
     def forward(self, x: torch.Tensor, c: torch.Tensor = None, causal_pad: bool = True):
+        """Compute residual and skip output from inputs x.
+
+        Args:
+            x: (B,C,T) tensor where C is the number of residual channels
+                when `in_channels` was specified the number of input channels
+            c: optional tensor containing a global (B,C,1) or local (B,C,T)
+                condition, where C is the number of condition channels.
+            causal_pad: layer performs causal padding when set to True, otherwise
+                assumes the input is already properly padded.
+
+        Returns
+            r: (B,C,T) tensor where C is the number of residual channels
+            skip: (B,C,T) tensor where C is the number of skip channels
+        """
         p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
         x_dilated = self.conv_dilation(F.pad(x, p))
         if self.cond_channels:
@@ -134,6 +160,15 @@ class WaveNetLogitsHead(WaveLayerBase):
         out_channels: int,
         bias: bool = True,
     ):
+        """Collates skip results and transforms them to logit predictions.
+
+        Args:
+            skip_channels: number of skip channels
+            residual_channels: number of residual channels
+            head_channels: number of hidden channels to compute result
+            out_channels: number of output channels
+            bias: When true, convolutions use a bias term.
+        """
         del residual_channels
         super().__init__(kernel_size=1, dilation=1, in_channels=skip_channels)
         self.transform = torch.nn.Sequential(
@@ -153,7 +188,18 @@ class WaveNetLogitsHead(WaveLayerBase):
             ),  # logits
         )
 
-    def forward(self, encoded, skips):
+    def forward(self, encoded: torch.Tensor, skips: list[torch.Tensor]):
+        """Compute logits from WaveNet layer results.
+
+        Args:
+            encoded: unused last residual output of last layer
+            skips: list of skip connections of shape (B,C,T) where C is
+                the number of skip channels.
+
+        Returns:
+            logits: (B,Q,T) tensor of logits, where Q is the number of output
+            channels.
+        """
         del encoded
         return self.transform(sum(skips))
 

@@ -69,6 +69,13 @@ class SignalProcessor:
         signal_low: Optional[float] = -1.0,
         signal_high: Optional[float] = 1.0,
     ) -> None:
+        """Preprocesses continous signals for use in discrete WaveNets.
+
+        Args:
+            quantization_levels: number of discrete bins in the WaveNet model.
+            signal_low: min signal value to expect
+            signal_high: max signal value to expect
+        """
         self.load_state(
             SignalProcessorState(
                 quantization_levels=quantization_levels,

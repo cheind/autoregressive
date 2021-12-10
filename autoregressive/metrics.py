@@ -19,23 +19,15 @@ def sample_entropy(
     Richman, J. S., & Moorman, J. R. (2000). Physiological time-series analysis
     using approximate entropy and sample entropy.
 
-    Params
-    ------
-    x: (B,T) tensor
-        Batched time-series
-    m: int
-        Embedding length
-    r: float
-        Distance threshold, if None then will be computed as `0.2std(x)`
-    stride: int
-        Step between embedding vectors
-    subsample: int
-        Reduce the number of possible vectors of length m.
+    Args:
+        x: (B,T) tensor of batched time-series
+        m: embedding length
+        r: distance threshold, if None then will be computed as `0.2std(x)`
+        stride: step between embedding vectors
+        subsample: reduce the number of possible vectors of length m
 
-    Returns
-    -------
-    SE: (B,) tensor
-        Sample entropy for each sequence
+    Returns:
+        se: (B,) tensor containing sample entropy for each sequence
     """
     x = torch.atleast_2d(x)
     B, T = x.shape

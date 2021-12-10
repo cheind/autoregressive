@@ -161,13 +161,13 @@ class WaveNetLogitsHead(WaveLayerBase):
 @dataclasses.dataclass
 class WaveNetTrainOpts:
     skip_partial: bool = True
-    lr: float = 1e-3
-    sched_patience: int = 25
+    lr: float = 0.002
+    sched_patience: int = 500
     train_ro_horizon: int = 1
     train_ro_num_origins: Optional[int] = None
     train_ro_loss_lambda: float = 1.0
-    val_ro_horizon: int = 32
-    val_ro_num_origins: Optional[int] = 8
+    val_ro_horizon: int = 1
+    val_ro_num_origins: Optional[int] = None
 
 
 class WaveNet(pl.LightningModule):

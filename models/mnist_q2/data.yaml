@@ -3,7 +3,7 @@ data:
   init_args:
     binarize: true
     apply_peano_map: false
-    batch_size: 32
+    batch_size: 64
     num_workers: 0
     digit_conditioning: true
     seed: null

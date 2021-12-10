@@ -231,6 +231,21 @@ class WaveNet(pl.LightningModule):
         conv_bias: bool = False,
         train_opts: WaveNetTrainOpts = WaveNetTrainOpts(),
     ):
+        """Creates a WaveNet.
+
+        Args:
+            quantization_levels: the number of quantization levels Q
+            wave_dilations: a list containing dilations factors for each layer
+            wave_kernel_size: kernel size to use for each dilated convolution in each layer
+            residual_channels: number of residual channels
+            dilation_channels: number of dilation channels
+            skip_channels: number of skip channels
+            cond_channels: number of condition channels or None if no condition is used.
+            head_channels: number of hidden channels in the logits head module.
+            input_kernel_size: kernel size of the first layer to bootstrap WaveNet layer processing.
+            conv_bias: Whether or not to use bias terms in WaveNetLayers.
+            train_opts: Training options
+        """
         super().__init__()
         in_channels = quantization_levels
         layers = [
@@ -276,7 +291,23 @@ class WaveNet(pl.LightningModule):
         _logger.info(f"Receptive field of WaveNet {self.receptive_field}")
         self.save_hyperparameters()
 
-    def encode(self, x, c: torch.Tensor = None, causal_pad: bool = True):
+    def encode(
+        self, x, c: torch.Tensor = None, causal_pad: bool = True
+    ) -> tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
+        """Encodes an input sequence.
+
+        Args:
+            x: (B,T) or (B,Q,T) tensor containing observations
+            c: optional conditioning Tensor. (B,C,1) for global conditions,
+                (B,C,T) for local conditions. None if unused
+            causal_pad: Whether or not to perform causal padding.
+
+        Returns:
+            o: residual output (B,C,T) where C is the number of residual channels.
+            layer_inputs: list of tensors of shape (B,C,T) containing inputs for each layer.
+                Mainly used in fast-generators to keep track of intermediate results.
+            skips: list of tensors of shape (B,C,T) where C is number of skip channels.
+        """
         x = encoding.one_hotf(x, quantization_levels=self.quantization_levels)
 
         skips = []
@@ -290,9 +321,24 @@ class WaveNet(pl.LightningModule):
 
         return x, layer_inputs, skips
 
-    def forward(self, x, c: torch.Tensor = None, causal_pad: bool = True):
-        # x (B,Q,T) or (B,T)
-        # c None, (B,C,T) or (B,C,1)
+    def forward(
+        self, x, c: torch.Tensor = None, causal_pad: bool = True
+    ) -> tuple[
+        torch.Tensor, tuple[torch.Tensor, list[torch.Tensor], list[torch.Tensor]]
+    ]:
+        """Computes logits and encoding results from observations.
+
+        Args:
+            x: (B,T) or (B,Q,T) tensor containing observations
+            c: optional conditioning Tensor. (B,C,1) for global conditions,
+                (B,C,T) for local conditions. None if unused
+            causal_pad: Whether or not to perform causal padding.
+
+        Returns:
+            logits: (B,Q,T) tensor of logits. Note that the t-th temporal output
+                represents the distribution over t+1.
+            encoded: same as `.encode`.
+        """
         encoded_result = self.encode(x, c=c, causal_pad=causal_pad)
         return self.logits(encoded_result[0], encoded_result[2]), encoded_result
 

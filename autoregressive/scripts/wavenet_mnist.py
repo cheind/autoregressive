@@ -13,6 +13,7 @@ from . import wavenet_signals
 
 
 def load_images_targets(data: datasets.MNISTDataModule, n: int, seed: int = None):
+    """Fetches n random images/targets from the test dataset"""
     ds = data.test_dataloader().dataset
     g = torch.default_generator
     if seed is not None:
@@ -33,8 +34,21 @@ def load_images_targets(data: datasets.MNISTDataModule, n: int, seed: int = None
 @torch.no_grad()
 def compute_log_pxy(
     imgs: torch.Tensor, model: wave.WaveNet, horizon: int = None, tau: float = 1.0
-):
-    """Computes p(X=x|Y) for each possible value of y as a BxQ tensor"""
+) -> torch.Tensor:
+    """Computes p(X=x,Y=y) and returns a BxQ tensor.
+
+    To compute p(X,Y) from p(X|Y) we need to make an assumption about p(Y). For MNIST
+    we assume a uniform distribution over 10 classes.
+
+    Args:
+        imgs: (B,T) tensor of images where T=28*28
+        model: the wavenet model
+        horizon: number of pixels to consider observed
+        tau: temperature scaling parameter.
+
+    Returns:
+        log_pxy: (B,Q) tensor, where Q is the number of quantization levels
+    """
     # log p(X=x) = log sum_y p(X=x|Y=y)p(Y=y)
     #            = log sum_y exp(log p(X=x|Y=y)p(Y=y))
     #            = log sum_y exp(log p(X=x|Y=y) + log p(Y=y))
@@ -48,20 +62,23 @@ def compute_log_pxy(
     horizon = min(horizon, (T - 1))
     log_py = torch.log(torch.tensor(1.0 / 10))
 
+    # All possible one-hot conditions
     y_conds = (
         (F.one_hot(torch.arange(0, Y, 1), num_classes=Y).permute(0, 1).view(Y, Y, 1))
         .to(imgs.device)
         .float()
     )
 
-    # imgs is (B,T)
     log_pxys = []
+    # For each class
     for y in range(10):
+        # First, compute p(X|Y=y)
         logits, _ = model.forward(x=imgs, c=y_conds[y : y + 1])  # (B,Q,T)
         log_px_y = F.log_softmax(logits / tau, 1)
-        log_px_y = log_px_y[
-            ..., :-1
-        ]  # TODO document what's happening here: predictions vs input
+        # Note, wavenet predictions for the i-th sample is the distribution p(X_(i+1)|X_<=i, Y=y).
+        # To compute get the value p(X=x|Y=y) we need to shift the image by one sample. Effectively,
+        # we are not including p(X0).
+        log_px_y = log_px_y[..., :-1]
         log_px_y = log_px_y.permute(0, 2, 1).reshape(-1, Q)  # (B*T,Q)
         log_px_y = log_px_y[torch.arange(B * (T - 1)), imgs[:, 1:].reshape(-1)].view(
             B, (T - 1)
@@ -237,7 +254,6 @@ class DensityEstimationCommand(wavenet_signals.BaseCommand):
         angles = torch.tensor([-1.0, 0.0, 1.0, 3.1415 / 2, 2.0])
         imgs, targets = load_images_targets(self.data, 1, seed=self.seed)
         img = imgs[0].to(dev)
-        target = targets[0]
         imgs = self._rotated_versions(img, angles)
 
         log_pxs = []

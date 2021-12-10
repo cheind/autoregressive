@@ -155,7 +155,7 @@ class PredictSignalsCommand(BaseCommand):
     def __init__(
         self,
         ckpt: str,
-        data: pl.LightningDataModule = None,
+        data: pl.LightningDataModule,
         num_observed: int = None,
         horizon: int = None,
         num_curves: int = 4,

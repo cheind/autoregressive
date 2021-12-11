@@ -59,7 +59,14 @@ class BaseCommand(abc.ABC):
         # See https://github.com/PyTorchLightning/pytorch-lightning/discussions/10956#discussioncomment-1765546
         from jsonargparse import SUPPRESS
 
-        for key in ["model", "trainer", "seed_everything", "optimizer", "lr_scheduler"]:
+        for key in [
+            "model",
+            "trainer",
+            "seed_everything",
+            "optimizer",
+            "lr_scheduler",
+            "ckpt_path",
+        ]:
             parser.add_argument(f"--{key}", type=Any, help=SUPPRESS)
         parser.add_argument("--config", action=jsonargparse.ActionConfigFile)
 

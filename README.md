@@ -52,7 +52,7 @@ The library comes with a set of pre-trained models in [`models/`](models/). The 
 
 Sample new signals from scratch
 ```bash
-python -m autoregressive.scripts.wavenet_signals sample --config "models/fseries_q127/data.yaml" --ckpt "models/fseries_q127/xxxxxx.ckpt" --condition 4 --horizon 1000
+python -m autoregressive.scripts.wavenet_signals sample --config "models/fseries_q127/config.yaml" --ckpt "models/fseries_q127/xxxxxx.ckpt" --condition 4 --horizon 1000
 ```
 The default models conditions on the periodicity of the signal. For the pre-trained model the value range is `int: [0..4]`, corresponding to periods of 5-10secs.
 
@@ -60,26 +60,26 @@ The default models conditions on the periodicity of the signal. For the pre-trai
 
 Predict the shape of partially observable curves.
 ```bash
-python -m autoregressive.scripts.wavenet_signals predict --config "models/fseries_q127/data.yaml" --ckpt "models/fseries_q127/xxxxxx.ckpt" --horizon 1500 --num_observed 50 --num_trajectories 20 --num_curves 1 --show_confidence true
+python -m autoregressive.scripts.wavenet_signals predict --config "models/fseries_q127/config.yaml" --ckpt "models/fseries_q127/xxxxxx.ckpt" --horizon 1500 --num_observed 50 --num_trajectories 20 --num_curves 1 --show_confidence true
 ```
 
 ### 2D MNIST
 
 To sample from the class-conditional model
 ```bash
-python -m autoregressive.scripts.wavenet_mnist sample --config "models/mnist_q2/data.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
+python -m autoregressive.scripts.wavenet_mnist sample --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
 ```
 ---
 
 Generate images conditioned on the digit class and observed pixels.
 ```bash
-python -m autoregressive.scripts.wavenet_mnist predict --config "models/mnist_q2/data.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt" 
+python -m autoregressive.scripts.wavenet_mnist predict --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt" 
 ```
 
 ---
 To perform classification
 ```bash
-python -m autoregressive.scripts.wavenet_mnist classify --config "models/mnist_q2/data.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
+python -m autoregressive.scripts.wavenet_mnist classify --config "models/mnist_q2/config.yaml" --ckpt "models/mnist_q2/xxxxxx.ckpt"
 ```
 
 ## Train

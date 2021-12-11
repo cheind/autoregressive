@@ -1,9 +1,0 @@
-data:
-  class_path: autoregressive.datasets.MNISTDataModule
-  init_args:
-    binarize: true
-    apply_peano_map: false
-    batch_size: 64
-    num_workers: 0
-    digit_conditioning: true
-    seed: null

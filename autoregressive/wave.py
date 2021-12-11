@@ -84,18 +84,21 @@ class WaveNetLayer(WaveLayerBase):
             dilation=dilation,
             bias=bias,
         )
+        self.conv_dilation_norm = torch.nn.GroupNorm(1, 2 * dilation_channels)
         self.conv_res = torch.nn.Conv1d(
             dilation_channels,
             residual_channels,
             kernel_size=1,
             bias=bias,
         )
+        self.conv_res_norm = torch.nn.GroupNorm(1, residual_channels)
         self.conv_skip = torch.nn.Conv1d(
             dilation_channels,
             skip_channels,
             kernel_size=1,
             bias=bias,
         )
+        self.conv_skip_norm = torch.nn.GroupNorm(1, skip_channels)
         self.conv_cond = None
         if cond_channels is not None:
             self.conv_cond = torch.nn.Conv1d(
@@ -130,7 +133,7 @@ class WaveNetLayer(WaveLayerBase):
             skip: (B,C,T) tensor where C is the number of skip channels
         """
         p = (self.causal_left_pad, 0) if causal_pad else (0, 0)
-        x_dilated = self.conv_dilation(F.pad(x, p))
+        x_dilated = self.conv_dilation_norm(self.conv_dilation(F.pad(x, p)))
         if self.cond_channels:
             assert c is not None, "conditioning required"
             x_cond = self.conv_cond(c)
@@ -138,8 +141,8 @@ class WaveNetLayer(WaveLayerBase):
         x_filter = torch.tanh(x_dilated[:, : self.dilation_channels])
         x_gate = torch.sigmoid(x_dilated[:, self.dilation_channels :])
         x_h = x_gate * x_filter
-        skip = self.conv_skip(x_h)
-        res = self.conv_res(x_h)
+        skip = self.conv_skip_norm(self.conv_skip(x_h))
+        res = self.conv_res_norm(self.conv_res(x_h))
 
         if self.conv_input is not None:
             x = self.conv_input(x)  # convert to res channels
@@ -179,6 +182,7 @@ class WaveNetLogitsHead(WaveLayerBase):
                 kernel_size=1,
                 bias=bias,
             ),  # enlarge and squeeze (not based on paper)
+            torch.nn.GroupNorm(1, head_channels),
             torch.nn.LeakyReLU(),
             torch.nn.Conv1d(
                 head_channels,

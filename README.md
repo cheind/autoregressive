@@ -41,7 +41,7 @@ The presentation source as well as all generated images are public domain. In ca
 To install run,
 
 ```
-pip install https://github.com/cheind/autoregressive.git#egg=autoregressive[dev]
+pip install git+https://github.com/cheind/autoregressive.git#egg=autoregressive[dev]
 ```
 which requires Python 3.9 and a recent PyTorch > 1.9
 

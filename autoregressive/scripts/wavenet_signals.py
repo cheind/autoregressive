@@ -271,7 +271,7 @@ class PredictSignalsCommand(BaseCommand):
                     mean - 2 * std,
                     mean + 2 * std,
                     alpha=0.2,
-                    label="predicted +/- 2$\sigma$",
+                    label="predicted +/- 2$sigma$",
                 )
                 ax.plot(
                     t[num_obs : num_obs + horizon], mean, "-", label="predicted mean"

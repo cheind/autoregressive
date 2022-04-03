@@ -1,7 +1,6 @@
 import torch
-import torch.nn.functional as F
 
-from .. import metrics, wave, generators
+from .. import metrics
 
 
 def test_sample_entropy():

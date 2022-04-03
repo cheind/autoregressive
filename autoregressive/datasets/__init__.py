@@ -1,3 +1,4 @@
+# flake8: noqa
 from .series_dataset import *
 from .fourier_dataset import *
 from .fourier import *

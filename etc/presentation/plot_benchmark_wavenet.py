@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
-import numpy as np
 import pickle
 
 
@@ -35,7 +34,7 @@ def main():
     ax.set_xlabel("Number of Dilated Layers")
     ax.legend(loc="upper center")
     fig.tight_layout()
-    fig.savefig(f"tmp/benchmark_generators.svg", bbox_inches="tight")
+    fig.savefig("tmp/benchmark_generators.svg", bbox_inches="tight")
     plt.show()
 
 

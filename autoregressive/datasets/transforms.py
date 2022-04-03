@@ -1,8 +1,7 @@
-__all__ = ["Encode", "Noise", "chain_transforms"]
+__all__ = ["Noise", "chain_transforms"]
 
 import torch
 from .series_dataset import SeriesMeta
-from ..signal import SignalProcessor
 
 
 class Noise:

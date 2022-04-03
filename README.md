@@ -1,4 +1,5 @@
-![](https://app.travis-ci.com/cheind/autoregressive.svg?branch=main)
+[![Build Status](https://github.com/cheind/autoregressive/actions/workflows/python-package.yml/badge.svg)](https://github.com/cheind/autoregressive/actions/workflows/python-package.yml)
+
 # Autoregressive 
 
 This repository contains all the necessary PyTorch code, tailored to my [presentation](etc/presentation/autoregressive_presentation.pdf), to train and generate data from WaveNet-like autoregressive models.
